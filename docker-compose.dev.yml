@@ -1,0 +1,19 @@
+# Local development Postgres only (production uses Coolify's managed Postgres).
+# Start it with:  docker compose -f docker-compose.dev.yml up -d
+# Then set DATABASE_URL in your .env to:
+#   postgresql://heylily:heylily@localhost:5432/heylily?schema=public
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: heylily
+      POSTGRES_PASSWORD: heylily
+      POSTGRES_DB: heylily
+    ports:
+      - "5432:5432"
+    volumes:
+      - heylily_pgdata:/var/lib/postgresql/data
+
+volumes:
+  heylily_pgdata:

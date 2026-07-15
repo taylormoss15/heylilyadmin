@@ -8,10 +8,12 @@ generator client {
 }
 
 datasource db {
-  // SQLite by default for zero-config local dev. Point DATABASE_URL at
-  // Postgres in production (e.g. "postgresql://...") — only this line and
-  // the DATABASE_URL env var need to change; the models are portable.
-  provider = "sqlite"
+  // Postgres in all environments. DATABASE_URL is injected by Coolify (from
+  // the Postgres resource) in production; for local dev, run the bundled
+  // `docker compose -f docker-compose.dev.yml up -d` and use the DATABASE_URL
+  // in .env.example. The models use plain String fields for enum-like values
+  // (a portability choice from the SQLite era), so nothing else changes here.
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

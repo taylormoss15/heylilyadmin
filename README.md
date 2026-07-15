@@ -20,16 +20,18 @@ GHL itself. This repo is the backend service GHL talks to over its API, not a re
 ## Stack
 
 Next.js 14 (App Router, TypeScript) for both the admin dashboard UI and the API routes, Prisma
-(SQLite locally, swap to Postgres for production — see `prisma/schema.prisma`), Playwright +
-axe-core for real accessibility scans, Tailwind for the dashboard UI.
+(Postgres), Playwright + axe-core for real accessibility scans, Tailwind for the dashboard UI.
 
-## Getting started
+To **deploy** (Coolify, Docker, Postgres, env vars), see **[DEPLOY.md](./DEPLOY.md)**.
+
+## Getting started (local)
 
 ```bash
+docker compose -f docker-compose.dev.yml up -d   # local Postgres
 npm install
 cp .env.example .env
 # fill in SESSION_SECRET (openssl rand -hex 32), ADMIN_EMAIL, ADMIN_PASSWORD at minimum
-npm run db:push       # creates the SQLite schema
+npm run db:push       # creates the schema
 npm run db:seed       # creates your admin login
 npm run dev            # http://localhost:3000
 ```
@@ -122,9 +124,10 @@ incidents, email seats, recent GHL sync activity. Gated by a simple session-cook
 
 ## Deploying
 
-Any Node host works (Vercel, or your existing Lightsail box behind Cloudflare). If deploying
-where Playwright's bundled Chromium isn't pre-installed, run `npx playwright install --with-deps
-chromium` as part of your build step.
+See **[DEPLOY.md](./DEPLOY.md)** for the full Coolify walkthrough. In short: it ships as a
+Docker container (the `Dockerfile` bundles Chromium for the scanner) plus a Postgres database,
+and redeploys on every push to `main`. The container entrypoint (`docker-entrypoint.sh`) syncs
+the schema and seeds the admin user on boot.
 
 ## Relationship to the build spec's phases
 
