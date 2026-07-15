@@ -1,0 +1,141 @@
+// Hey Lily Admin — data model
+// Covers everything GHL doesn't natively store: the accessibility audit trail,
+// uptime incident history, managed-email seat tracking, and a log of writes
+// back into GHL (custom fields / notes / workflow triggers).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // SQLite by default for zero-config local dev. Point DATABASE_URL at
+  // Postgres in production (e.g. "postgresql://...") — only this line and
+  // the DATABASE_URL env var need to change; the models are portable.
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite's Prisma connector doesn't support native enums, so the fields
+// below that would otherwise be enums (Tier, ClientStatus, ScanStatus,
+// EmailProvider, SeatStatus) are plain Strings, validated against the
+// matching union types in lib/types.ts at the API boundary (zod schemas
+// in the route handlers). If this moves to Postgres, these can become
+// real `enum` blocks again — see lib/types.ts for the value sets.
+
+model Client {
+  id            String       @id @default(cuid())
+  name          String
+  domain        String? // primary site domain, used as scan/uptime target
+  siteUrl       String? // full URL to scan/monitor if different from domain
+  ghlLocationId String?      @unique // GHL sub-account ("location") id
+  tier          String       @default("STARTER") // Tier: STARTER | PRO | PREMIUM
+  status        String       @default("ACTIVE") // ClientStatus: ACTIVE | AT_RISK | CHURNED
+  hasTrackers   Boolean      @default(false) // drives cookie-banner toggle in snapshot
+  scanCadenceDays Int        @default(7) // weekly by default per spec
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  accessibilityScans AccessibilityScan[]
+  remediationNotes   RemediationNote[]
+  uptimeMonitor      UptimeMonitor?
+  uptimeIncidents    UptimeIncident[]
+  emailSeats         EmailSeat[]
+  ghlSyncLogs        GhlSyncLog[]
+
+  @@index([status])
+  @@index([tier])
+}
+
+model AccessibilityScan {
+  id              String     @id @default(cuid())
+  clientId        String
+  client          Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  scannedAt       DateTime   @default(now())
+  url             String
+  tool            String     @default("axe-core")
+  violationCount  Int        @default(0)
+  seriousCount    Int        @default(0) // "serious"/"critical" impact violations
+  passCount       Int        @default(0)
+  incompleteCount Int        @default(0)
+  score           Float? // 0-100 composite score, if computed
+  violations      String // JSON-encoded axe-core violation summary
+  status          String     @default("COMPLETED") // ScanStatus: COMPLETED | FAILED
+  errorMessage    String?
+
+  remediationNotes RemediationNote[]
+
+  @@index([clientId, scannedAt])
+}
+
+model RemediationNote {
+  id        String             @id @default(cuid())
+  clientId  String
+  client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  scanId    String?
+  scan      AccessibilityScan? @relation(fields: [scanId], references: [id], onDelete: SetNull)
+  note      String
+  createdBy String
+  createdAt DateTime           @default(now())
+
+  @@index([clientId, createdAt])
+}
+
+model UptimeMonitor {
+  id                String   @id @default(cuid())
+  clientId          String   @unique
+  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  provider          String // "uptimerobot" | "betterstack"
+  externalMonitorId String? // id assigned by the external uptime tool
+  url               String
+  createdAt         DateTime @default(now())
+}
+
+model UptimeIncident {
+  id          String    @id @default(cuid())
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  provider    String
+  startedAt   DateTime
+  resolvedAt  DateTime?
+  reason      String?
+  rawPayload  String? // JSON-encoded original webhook payload
+  ghlNotified Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([clientId, startedAt])
+}
+
+model EmailSeat {
+  id              String    @id @default(cuid())
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  provider        String // EmailProvider: GOOGLE_WORKSPACE | MICROSOFT_365
+  seatEmail       String
+  status          String    @default("ACTIVE") // SeatStatus: ACTIVE | SUSPENDED | DEPROVISIONED
+  createdAt       DateTime  @default(now())
+  deprovisionedAt DateTime?
+
+  @@index([clientId])
+}
+
+// Audit trail of every write the backend makes into GHL (custom field
+// updates, notes, workflow triggers) — useful for debugging sync issues.
+model GhlSyncLog {
+  id           String   @id @default(cuid())
+  clientId     String?
+  client       Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  action       String // e.g. "trigger_workflow", "update_custom_field", "add_note"
+  payload      String? // JSON-encoded request payload
+  success      Boolean
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  @@index([clientId, createdAt])
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
