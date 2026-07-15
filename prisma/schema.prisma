@@ -41,6 +41,7 @@ model Client {
   uptimeIncidents    UptimeIncident[]
   emailSeats         EmailSeat[]
   ghlSyncLogs        GhlSyncLog[]
+  sites              Site[]
 
   @@index([status])
   @@index([tier])
@@ -138,4 +139,89 @@ model AdminUser {
   email        String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
+}
+
+// --- Website builder (Phase A) ---
+// A Site belongs to a Client and holds shared theme + business data. Its
+// Pages each store an IR (structured JSON section list) that the renderer
+// turns into self-contained, compliance-baked-in HTML. See lib/site/*.
+// theme / businessData / ir are JSON-encoded strings (SQLite has no JSON
+// column); their shapes are defined and validated in lib/site/ir.ts.
+
+model Site {
+  id               String   @id @default(cuid())
+  clientId         String
+  client           Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name             String
+  status           String   @default("DRAFT") // DRAFT | PUBLISHED
+  theme            String // JSON: Theme
+  businessData     String // JSON: BusinessData
+  showCookieBanner Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  pages Page[]
+
+  @@index([clientId])
+}
+
+model Page {
+  id        String   @id @default(cuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  path      String   @default("/")
+  title     String
+  ir        String // JSON: PageIR (ordered sections)
+  isHome    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions       PageVersion[]
+  publishRecords PublishRecord[]
+
+  @@unique([siteId, path])
+  @@index([siteId])
+}
+
+// Snapshot of a page's IR + rendered HTML on every edit — powers undo and
+// a design audit trail.
+model PageVersion {
+  id        String   @id @default(cuid())
+  pageId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  ir        String // JSON snapshot
+  html      String // rendered snapshot
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@index([pageId, createdAt])
+}
+
+model SiteAsset {
+  id        String   @id @default(cuid())
+  siteId    String
+  kind      String // "image" | "font"
+  cdnUrl    String
+  alt       String?
+  bytes     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([siteId])
+}
+
+// Ties a published page back to its validation results (a11y score, size).
+model PublishRecord {
+  id          String    @id @default(cuid())
+  pageId      String
+  page        Page      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  target      String    @default("ghl")
+  externalRef String?
+  status      String // "VALIDATED" | "PUBLISHED" | "BLOCKED"
+  a11yScore   Float?
+  sizeBytes   Int       @default(0)
+  publishedAt DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+
+  @@index([pageId, createdAt])
 }

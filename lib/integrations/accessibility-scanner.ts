@@ -66,39 +66,62 @@ async function runAxe(page: Page): Promise<RawAxeResults> {
   }) as Promise<RawAxeResults>;
 }
 
-export async function runAccessibilityScan(url: string): Promise<ScanSummary> {
+function summarize(results: RawAxeResults): ScanSummary {
+  const seriousCount = results.violations.filter(
+    (v) => v.impact === "serious" || v.impact === "critical"
+  ).length;
+
+  const violations = results.violations.map((v) => ({
+    id: v.id,
+    impact: v.impact ?? null,
+    description: v.description,
+    help: v.help,
+    helpUrl: v.helpUrl,
+    nodeCount: v.nodes.length,
+  }));
+
+  return {
+    violationCount: results.violations.length,
+    seriousCount,
+    passCount: results.passes.length,
+    incompleteCount: results.incomplete.length,
+    score: computeScore(results.violations.length, seriousCount, results.passes.length),
+    violations,
+  };
+}
+
+function launchBrowser() {
   // Uses the environment's pre-installed Chromium if PLAYWRIGHT_EXECUTABLE_PATH
   // is set (e.g. the sandboxed dev/session environment this was built in),
   // otherwise falls back to Playwright's own managed browser install.
   const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined;
-  const browser = await chromium.launch({ headless: true, executablePath });
+  return chromium.launch({ headless: true, executablePath });
+}
+
+export async function runAccessibilityScan(url: string): Promise<ScanSummary> {
+  const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+    return summarize(await runAxe(page));
+  } finally {
+    await browser.close();
+  }
+}
 
-    const results = await runAxe(page);
-
-    const seriousCount = results.violations.filter(
-      (v) => v.impact === "serious" || v.impact === "critical"
-    ).length;
-
-    const violations = results.violations.map((v) => ({
-      id: v.id,
-      impact: v.impact ?? null,
-      description: v.description,
-      help: v.help,
-      helpUrl: v.helpUrl,
-      nodeCount: v.nodes.length,
-    }));
-
-    return {
-      violationCount: results.violations.length,
-      seriousCount,
-      passCount: results.passes.length,
-      incompleteCount: results.incomplete.length,
-      score: computeScore(results.violations.length, seriousCount, results.passes.length),
-      violations,
-    };
+/**
+ * Scan a raw HTML string (rather than a live URL) — used by the website
+ * builder to validate a generated page before publish. Loads the HTML
+ * directly with setContent; waits only for DOM parse, so the deferred
+ * compliance-badge script (which points at an external admin URL) doesn't
+ * hold this up or require network access.
+ */
+export async function scanHtmlContent(html: string): Promise<ScanSummary> {
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 30000 });
+    return summarize(await runAxe(page));
   } finally {
     await browser.close();
   }

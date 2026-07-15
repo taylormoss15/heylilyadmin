@@ -7,6 +7,7 @@ import NoteForm from "./note-form";
 import SeatForm from "./seat-form";
 import SeatRow from "./seat-row";
 import StatusEditor from "./status-editor";
+import SiteList from "./site-list";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
       uptimeMonitor: true,
       emailSeats: true,
       ghlSyncLogs: { orderBy: { createdAt: "desc" }, take: 10 },
+      sites: { orderBy: { createdAt: "desc" }, include: { _count: { select: { pages: true } } } },
     },
   });
 
@@ -138,6 +140,18 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
               ))}
             </ul>
           )}
+        </section>
+
+        <section className="card md:col-span-2">
+          <SiteList
+            clientId={client.id}
+            sites={client.sites.map((s) => ({
+              id: s.id,
+              name: s.name,
+              status: s.status,
+              pageCount: s._count.pages,
+            }))}
+          />
         </section>
 
         <section className="card space-y-4 md:col-span-2">
