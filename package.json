@@ -16,7 +16,9 @@
     "scan:run": "tsx scripts/trigger-scans.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
     "@prisma/client": "^5.20.0",
+    "aws4fetch": "^1.0.20",
     "axe-core": "^4.10.0",
     "bcryptjs": "^2.4.3",
     "next": "14.2.35",

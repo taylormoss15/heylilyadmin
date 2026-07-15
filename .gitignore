@@ -12,3 +12,4 @@ prisma/dev.db-journal
 npm-debug.log*
 .vercel
 *.tsbuildinfo
+.uploads/

@@ -36,7 +36,7 @@ export default function SiteEditor(props: {
   initialSections: Section[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"content" | "business" | "design">("content");
+  const [tab, setTab] = useState<"content" | "business" | "design" | "assistant">("content");
   const [name] = useState(props.initialName);
   const [status, setStatus] = useState(props.initialStatus);
   const [showCookieBanner, setShowCookieBanner] = useState(props.initialShowCookieBanner);
@@ -50,6 +50,17 @@ export default function SiteEditor(props: {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ValidationReport | null>(null);
   const [validating, setValidating] = useState(false);
+
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const [publishing, setPublishing] = useState(false);
+  const [publishReady, setPublishReady] = useState<{ instructions: string[]; exportUrl: string } | null>(null);
+  const [liveUrl, setLiveUrl] = useState("");
+  const [publishDone, setPublishDone] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   async function save(): Promise<boolean> {
     setSaving(true);
@@ -101,6 +112,77 @@ export default function SiteEditor(props: {
     if (ok) window.open(`/api/pages/${props.pageId}/export`, "_blank");
   }
 
+  async function runAi() {
+    if (!aiInstruction.trim()) return;
+    setAiLoading(true);
+    setAiError(null);
+    setAiSummary(null);
+    const res = await fetch(`/api/sites/${props.siteId}/ai`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pageId: props.pageId, instruction: aiInstruction }),
+    });
+    setAiLoading(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setAiError(typeof data.error === "string" ? data.error : "AI edit failed");
+      return;
+    }
+    const data = await res.json();
+    // The route already persisted the change; sync local state + preview.
+    setSections(data.ir.sections);
+    if (data.theme) setTheme(data.theme);
+    setAiSummary(data.summary);
+    setAiInstruction("");
+    setPreviewKey((k) => k + 1);
+  }
+
+  async function publish() {
+    setPublishing(true);
+    setPublishError(null);
+    setPublishDone(null);
+    setPublishReady(null);
+    const ok = await save();
+    if (!ok) {
+      setPublishing(false);
+      return;
+    }
+    const res = await fetch(`/api/pages/${props.pageId}/publish`, { method: "POST" });
+    setPublishing(false);
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 422) {
+      setReport(data.report);
+      setPublishError("Not ready to publish — see the checks below.");
+      return;
+    }
+    if (!res.ok) {
+      setPublishError(typeof data.error === "string" ? data.error : "Publish failed");
+      return;
+    }
+    setPublishReady({ instructions: data.instructions, exportUrl: data.exportUrl });
+  }
+
+  async function confirmLive() {
+    if (!liveUrl.trim()) return;
+    setPublishing(true);
+    setPublishError(null);
+    const res = await fetch(`/api/pages/${props.pageId}/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ liveUrl }),
+    });
+    setPublishing(false);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setPublishError(typeof data.error === "string" ? data.error : "Could not register the live URL");
+      return;
+    }
+    setPublishReady(null);
+    setPublishDone(data.message ?? "Published.");
+    setStatus("PUBLISHED");
+    router.refresh();
+  }
+
   // ---- section helpers ----
   function updateSection(index: number, next: Section) {
     setSections((prev) => prev.map((s, i) => (i === index ? next : s)));
@@ -127,13 +209,13 @@ export default function SiteEditor(props: {
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border border-slate-300 p-0.5 text-sm">
-            {(["content", "business", "design"] as const).map((t) => (
+            {(["content", "business", "design", "assistant"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
                 className={`rounded-md px-3 py-1.5 capitalize ${tab === t ? "bg-brand-500 text-white" : "text-slate-600"}`}
               >
-                {t}
+                {t === "assistant" ? "AI" : t}
               </button>
             ))}
           </div>
@@ -160,7 +242,7 @@ export default function SiteEditor(props: {
                     <button onClick={() => removeSection(i)} className="px-2 py-1 text-red-600 hover:underline">Remove</button>
                   </div>
                 </div>
-                <SectionFields section={section} onChange={(next) => updateSection(i, next)} />
+                <SectionFields siteId={props.siteId} section={section} onChange={(next) => updateSection(i, next)} />
               </div>
             ))}
 
@@ -191,6 +273,48 @@ export default function SiteEditor(props: {
             onCookieChange={setShowCookieBanner}
           />
         )}
+
+        {tab === "assistant" && (
+          <div className="card space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">Describe a change</h3>
+              <p className="text-xs text-slate-500">
+                The assistant edits the page directly. It can only produce compliant, accessible
+                sections — every change is validated before it&apos;s applied.
+              </p>
+            </div>
+            <textarea
+              className="input"
+              rows={3}
+              placeholder="e.g. Make the hero warmer and add a testimonials section with two quotes"
+              value={aiInstruction}
+              onChange={(e) => setAiInstruction(e.target.value)}
+            />
+            <button onClick={runAi} disabled={aiLoading} className="btn text-sm">
+              {aiLoading ? "Working…" : "Apply with AI"}
+            </button>
+            {aiError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{aiError}</p>}
+            {aiSummary && (
+              <p className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">{aiSummary}</p>
+            )}
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                "Rewrite the hero to be punchier",
+                "Add an FAQ section with 3 common questions",
+                "Use a warmer color palette",
+                "Add a testimonials section",
+              ].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setAiInstruction(s)}
+                  className="rounded-full border border-slate-300 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ---------- Preview column ---------- */}
@@ -212,8 +336,48 @@ export default function SiteEditor(props: {
               {validating ? "Checking…" : "Validate"}
             </button>
             <button onClick={exportPage} className="btn-secondary text-sm">Export HTML</button>
+            <button onClick={publish} disabled={publishing} className="btn text-sm">
+              {publishing ? "…" : "Publish"}
+            </button>
           </div>
         </div>
+
+        {publishError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{publishError}</p>}
+        {publishDone && (
+          <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">✓ {publishDone}</p>
+        )}
+        {publishReady && (
+          <div className="card space-y-3">
+            <h3 className="text-sm font-semibold text-slate-900">Ready to publish to GHL</h3>
+            <p className="text-xs text-slate-500">
+              GoHighLevel has no API to upload Custom HTML Pages, so this last step is manual:
+            </p>
+            <ol className="space-y-1 text-sm text-slate-700">
+              {publishReady.instructions.map((step, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="font-medium text-brand-600">{i + 1}.</span> {step}
+                </li>
+              ))}
+            </ol>
+            <a href={publishReady.exportUrl} target="_blank" rel="noreferrer" className="btn-secondary inline-block text-sm">
+              Download HTML for GHL
+            </a>
+            <div className="flex gap-2">
+              <input
+                className="input"
+                placeholder="https://client-domain.com/ (live URL after publishing)"
+                value={liveUrl}
+                onChange={(e) => setLiveUrl(e.target.value)}
+              />
+              <button onClick={confirmLive} disabled={publishing} className="btn text-sm">
+                Register
+              </button>
+            </div>
+            <p className="text-xs text-slate-400">
+              Registering the live URL starts ongoing weekly accessibility monitoring for the page.
+            </p>
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-xl border border-slate-300 bg-slate-100 p-3">
           <div className="mx-auto bg-white shadow-sm transition-all" style={{ width: DEVICE_WIDTH[device], maxWidth: "100%" }}>
@@ -313,7 +477,65 @@ function Area({ label, value, onChange }: { label: string; value: string; onChan
   );
 }
 
-function SectionFields({ section, onChange }: { section: Section; onChange: (s: Section) => void }) {
+/** Image picker: upload to R2 (or local fallback) which fills the URL, plus a required alt-text field. */
+function ImageField({
+  siteId,
+  url,
+  alt,
+  onChange,
+}: {
+  siteId: string;
+  url: string;
+  alt: string;
+  onChange: (url: string, alt: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function upload(file: File) {
+    setUploading(true);
+    setErr(null);
+    const body = new FormData();
+    body.append("file", file);
+    body.append("alt", alt);
+    const res = await fetch(`/api/sites/${siteId}/assets`, { method: "POST", body });
+    setUploading(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setErr(typeof data.error === "string" ? data.error : "Upload failed");
+      return;
+    }
+    const { asset } = await res.json();
+    onChange(asset.cdnUrl, alt);
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-slate-200 p-2">
+      <div className="flex items-center gap-2">
+        {url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt="" className="h-12 w-12 rounded object-cover" />
+        ) : (
+          <div className="flex h-12 w-12 items-center justify-center rounded bg-slate-100 text-xs text-slate-400">none</div>
+        )}
+        <label className="btn-secondary cursor-pointer text-sm">
+          {uploading ? "Uploading…" : "Upload image"}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+          />
+        </label>
+      </div>
+      {err && <p className="text-xs text-red-600">{err}</p>}
+      <Field label="Image URL (absolute)" value={url} onChange={(v) => onChange(v, alt)} />
+      <Field label="Alt text (required)" value={alt} onChange={(v) => onChange(url, v)} />
+    </div>
+  );
+}
+
+function SectionFields({ siteId, section, onChange }: { siteId: string; section: Section; onChange: (s: Section) => void }) {
   switch (section.type) {
     case "hero":
       return (
@@ -324,10 +546,13 @@ function SectionFields({ section, onChange }: { section: Section; onChange: (s: 
             <Field label="Button label" value={section.ctaLabel ?? ""} onChange={(v) => onChange({ ...section, ctaLabel: v })} />
             <Field label="Button link" value={section.ctaHref ?? ""} onChange={(v) => onChange({ ...section, ctaHref: v })} />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Image URL (absolute)" value={section.image?.url ?? ""} onChange={(v) => onChange({ ...section, image: v ? { url: v, alt: section.image?.alt ?? "" } : undefined })} />
-            <Field label="Image alt text (required if image set)" value={section.image?.alt ?? ""} onChange={(v) => onChange({ ...section, image: section.image ? { ...section.image, alt: v } : section.image })} />
-          </div>
+          <span className="block text-sm font-medium text-slate-700">Hero image (optional)</span>
+          <ImageField
+            siteId={siteId}
+            url={section.image?.url ?? ""}
+            alt={section.image?.alt ?? ""}
+            onChange={(url, alt) => onChange({ ...section, image: url ? { url, alt } : undefined })}
+          />
         </div>
       );
     case "about":
@@ -363,10 +588,7 @@ function SectionFields({ section, onChange }: { section: Section; onChange: (s: 
             onChange={(images) => onChange({ ...section, images })}
             blank={{ url: "", alt: "" }}
             render={(item, upd) => (
-              <>
-                <Field label="Image URL (absolute)" value={item.url} onChange={(v) => upd({ ...item, url: v })} />
-                <Field label="Alt text (required)" value={item.alt} onChange={(v) => upd({ ...item, alt: v })} />
-              </>
+              <ImageField siteId={siteId} url={item.url} alt={item.alt} onChange={(url, alt) => upd({ url, alt })} />
             )}
           />
         </div>
