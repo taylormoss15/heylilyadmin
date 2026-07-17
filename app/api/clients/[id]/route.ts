@@ -11,6 +11,10 @@ const updateClientSchema = z.object({
   status: z.enum(["ACTIVE", "AT_RISK", "CHURNED"]).optional(),
   hasTrackers: z.boolean().optional(),
   scanCadenceDays: z.number().int().positive().optional(),
+  hostingProvider: z.string().max(120).nullable().optional(),
+  domainRegistrar: z.string().max(120).nullable().optional(),
+  dnsProvider: z.string().max(120).nullable().optional(),
+  internalNotes: z.string().max(5000).nullable().optional(),
 });
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {

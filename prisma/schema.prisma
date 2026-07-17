@@ -34,6 +34,14 @@ model Client {
   status        String       @default("ACTIVE") // ClientStatus: ACTIVE | AT_RISK | CHURNED
   hasTrackers   Boolean      @default(false) // drives cookie-banner toggle in snapshot
   scanCadenceDays Int        @default(7) // weekly by default per spec
+
+  // Business/ops details for troubleshooting — where things are hosted and
+  // free-form internal notes. None of this is client-facing.
+  hostingProvider String? // where the site is hosted (Coolify/Lightsail, GHL, Wix…)
+  domainRegistrar String? // where the domain was bought (GoDaddy, Namecheap…)
+  dnsProvider     String? // where DNS is managed (Cloudflare, registrar…)
+  internalNotes   String? // free-form ops/troubleshooting notes
+
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
