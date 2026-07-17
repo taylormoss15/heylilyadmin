@@ -43,6 +43,7 @@ export default async function SiteEditorPage({ params }: { params: { siteId: str
         initialTheme={theme}
         initialBusinessData={businessData}
         initialSections={ir.sections}
+        initialHasCustomDesign={Boolean(homePage.customHtml && homePage.customHtml.trim())}
       />
     </div>
   );

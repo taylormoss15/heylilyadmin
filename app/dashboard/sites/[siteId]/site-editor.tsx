@@ -34,6 +34,7 @@ export default function SiteEditor(props: {
   initialTheme: Theme;
   initialBusinessData: BusinessData;
   initialSections: Section[];
+  initialHasCustomDesign: boolean;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"content" | "business" | "design" | "assistant">("content");
@@ -55,6 +56,11 @@ export default function SiteEditor(props: {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  const [customActive, setCustomActive] = useState(props.initialHasCustomDesign);
+  const [designDirection, setDesignDirection] = useState("");
+  const [designing, setDesigning] = useState(false);
+  const [designMsg, setDesignMsg] = useState<string | null>(null);
 
   const [publishing, setPublishing] = useState(false);
   const [publishReady, setPublishReady] = useState<{ instructions: string[]; exportUrl: string } | null>(null);
@@ -134,6 +140,47 @@ export default function SiteEditor(props: {
     if (data.theme) setTheme(data.theme);
     setAiSummary(data.summary);
     setAiInstruction("");
+    setPreviewKey((k) => k + 1);
+  }
+
+  async function generateDesign() {
+    setDesigning(true);
+    setDesignMsg(null);
+    setReport(null);
+    // Persist any structured/business/theme edits first so the designer works
+    // from the latest content.
+    await save();
+    const res = await fetch(`/api/sites/${props.siteId}/design`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pageId: props.pageId, instruction: designDirection || undefined }),
+    });
+    setDesigning(false);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setDesignMsg(typeof data.error === "string" ? data.error : "Design generation failed");
+      return;
+    }
+    setCustomActive(true);
+    setDesignMsg(
+      `${data.summary}${data.dryRun ? " (mock mode)" : ""} — a11y ${data.report?.a11yScore ?? "—"}/100${
+        data.report?.ok ? ", passes checks" : ", needs a fix pass"
+      }`
+    );
+    if (data.report) setReport(data.report);
+    setPreviewKey((k) => k + 1);
+  }
+
+  async function revertDesign() {
+    setDesigning(true);
+    await fetch(`/api/pages/${props.pageId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customHtml: null }),
+    });
+    setDesigning(false);
+    setCustomActive(false);
+    setDesignMsg(null);
     setPreviewKey((k) => k + 1);
   }
 
@@ -275,7 +322,41 @@ export default function SiteEditor(props: {
         )}
 
         {tab === "assistant" && (
-          <div className="card space-y-3">
+          <div className="space-y-3">
+            <div className="card space-y-3 border-brand-200 bg-brand-50">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">✨ World-class custom design</h3>
+                <p className="text-xs text-slate-600">
+                  Claude hand-codes a bespoke, high-converting site from this business&apos;s content —
+                  gated by the accessibility scanner, so it&apos;s guaranteed compliant.
+                </p>
+              </div>
+              <input
+                className="input"
+                placeholder="Optional style direction (e.g. bold and modern, warm and premium, minimal)…"
+                value={designDirection}
+                onChange={(e) => setDesignDirection(e.target.value)}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={generateDesign} disabled={designing} className="btn text-sm">
+                  {designing ? "Designing…" : customActive ? "Regenerate design" : "Generate world-class design"}
+                </button>
+                {customActive && (
+                  <button onClick={revertDesign} disabled={designing} className="btn-secondary text-sm">
+                    Revert to structured editor
+                  </button>
+                )}
+              </div>
+              {customActive && (
+                <p className="text-xs font-medium text-brand-700">
+                  Custom AI design is active — the preview and publish use it. The structured tabs edit the
+                  fallback version.
+                </p>
+              )}
+              {designMsg && <p className="rounded-lg bg-white px-3 py-2 text-sm text-slate-700">{designMsg}</p>}
+            </div>
+
+            <div className="card space-y-3">
             <div>
               <h3 className="text-sm font-semibold text-slate-900">Describe a change</h3>
               <p className="text-xs text-slate-500">
@@ -312,6 +393,7 @@ export default function SiteEditor(props: {
                   {s}
                 </button>
               ))}
+            </div>
             </div>
           </div>
         )}

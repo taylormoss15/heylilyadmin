@@ -292,8 +292,10 @@ function navLinks(ir: PageIR): { label: string; href: string }[] {
 }
 
 // ---- The compliance badge (client-facing audit log) ----
+// Exported so the custom-HTML finalizer injects the identical badge/cookie
+// as the structured renderer.
 
-function complianceBadge(clientId: string, adminBaseUrl: string): string {
+export function complianceBadge(clientId: string, adminBaseUrl: string): string {
   const base = adminBaseUrl.replace(/\/$/, "");
   return `<script>window.HEYLILY_CLIENT_ID=${JSON.stringify(clientId)};window.HEYLILY_API_BASE=${JSON.stringify(
     base
@@ -301,11 +303,35 @@ function complianceBadge(clientId: string, adminBaseUrl: string): string {
 <script src="${esc(base)}/widget/accessibility-badge.js" defer></script>`;
 }
 
-function cookieBanner(): string {
-  return `<div class="cookie" id="heylily-cookie" role="region" aria-label="Cookie consent">
+export function cookieBanner(): string {
+  return `<div class="cookie" id="heylily-cookie" role="region" aria-label="Cookie consent" style="position:fixed;left:0;right:0;bottom:0;z-index:2147483000;background:#1b2430;color:#fff;padding:14px 20px;display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;font:14px system-ui,sans-serif">
 <span>We use cookies to improve your experience.</span>
-<button type="button" onclick="document.getElementById('heylily-cookie').remove()">Accept</button>
+<button type="button" onclick="document.getElementById('heylily-cookie').remove()" style="background:#3b6fe0;color:#fff;border:none;border-radius:8px;padding:9px 18px;font:inherit;font-weight:600;cursor:pointer">Accept</button>
 </div>`;
+}
+
+/** LocalBusiness JSON-LD from business data — used to guarantee the AEO baseline on custom HTML pages. */
+export function localBusinessJsonLd(business: BusinessData): string {
+  const block: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    name: business.name,
+  };
+  if (business.tagline) block.description = business.tagline;
+  if (business.phone) block.telephone = business.phone;
+  if (business.email) block.email = business.email;
+  if (business.priceRange) block.priceRange = business.priceRange;
+  if (business.address) {
+    block.address = {
+      "@type": "PostalAddress",
+      streetAddress: business.address.street,
+      addressLocality: business.address.city,
+      addressRegion: business.address.region,
+      postalCode: business.address.postal,
+      addressCountry: business.address.country,
+    };
+  }
+  return `<script type="application/ld+json">${JSON.stringify(block).replace(/</g, "\\u003c")}</script>`;
 }
 
 // ---- Top-level render ----

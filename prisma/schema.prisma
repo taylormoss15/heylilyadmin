@@ -173,7 +173,10 @@ model Page {
   site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
   path      String   @default("/")
   title     String
-  ir        String // JSON: PageIR (ordered sections)
+  ir        String // JSON: PageIR (ordered sections) — the structured/editable version
+  customHtml String? // AI-generated bespoke HTML. When set, the page renders from
+  //                    this (with compliance injected) instead of the IR. Clear it
+  //                    to fall back to the structured renderer.
   isHome    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

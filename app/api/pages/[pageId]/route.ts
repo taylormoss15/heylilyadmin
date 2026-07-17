@@ -9,6 +9,8 @@ const updatePageSchema = z.object({
   title: z.string().min(1).optional(),
   path: z.string().min(1).optional(),
   ir: pageIrSchema.optional(),
+  // Pass null to clear a custom AI design and fall back to the structured editor.
+  customHtml: z.string().nullable().optional(),
 });
 
 export async function PATCH(request: NextRequest, { params }: { params: { pageId: string } }) {
@@ -28,6 +30,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { pageId
   if (parsed.data.title !== undefined) data.title = parsed.data.title;
   if (parsed.data.path !== undefined) data.path = parsed.data.path;
   if (parsed.data.ir !== undefined) data.ir = JSON.stringify(parsed.data.ir);
+  if (parsed.data.customHtml !== undefined) data.customHtml = parsed.data.customHtml;
 
   const page = await prisma.page.update({ where: { id: params.pageId }, data });
 
