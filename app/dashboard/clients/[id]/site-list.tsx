@@ -90,28 +90,42 @@ export default function SiteList({ clientId, sites }: { clientId: string; sites:
           Pulls their content, phone, email &amp; address, and scores their current site&apos;s accessibility risk.
         </p>
         {importError && <p className="text-sm text-red-600">{importError}</p>}
-        {importResult && (
-          <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-900">
-                {importResult.extracted.businessName}
-              </span>
-              <span className={`badge ${(importResult.riskScore ?? 0) >= 90 ? "badge-active" : "badge-at_risk"}`}>
-                Risk score: {importResult.riskScore ?? "—"}/100
-              </span>
+        {importResult && (() => {
+          const total = importResult.violationCount;
+          const serious = importResult.seriousCount;
+          const clean = total === 0;
+          const contactCount = [importResult.extracted.phone, importResult.extracted.email, importResult.extracted.address].filter(Boolean).length;
+          const containerTone = clean
+            ? "border-emerald-200 bg-emerald-50"
+            : serious > 0
+              ? "border-red-200 bg-red-50"
+              : "border-amber-200 bg-amber-50";
+          return (
+            <div className={`rounded-lg border p-3 space-y-2 ${containerTone}`}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-900">{importResult.extracted.businessName}</span>
+                <span className={`badge ${clean ? "bg-emerald-100 text-emerald-800" : serious > 0 ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>
+                  {clean ? "✓ Compliant" : serious > 0 ? "⚠ At risk — serious issues" : "⚠ Accessibility issues"}
+                </span>
+              </div>
+              {clean ? (
+                <p className="text-xs text-emerald-700">No accessibility issues detected on their current site.</p>
+              ) : (
+                <p className={`text-xs ${serious > 0 ? "text-red-700" : "text-amber-700"}`}>
+                  <strong>
+                    {total} accessibility {total === 1 ? "issue" : "issues"} found
+                    {serious > 0 ? ` — ${serious} serious` : ""}.
+                  </strong>{" "}
+                  Under the ADA, each is potential legal exposure for this business. (Compliance score {importResult.riskScore ?? "—"}/100 — anything below 100 means unresolved issues.)
+                </p>
+              )}
+              <p className="text-xs text-slate-500">{contactCount} contact detail(s) pulled from their site.</p>
+              <Link href={`/dashboard/sites/${importResult.siteId}`} className="btn text-sm inline-block">
+                Open &amp; redesign with AI →
+              </Link>
             </div>
-            <p className="text-xs text-slate-600">
-              {importResult.violationCount} accessibility issue{importResult.violationCount === 1 ? "" : "s"} found
-              ({importResult.seriousCount} serious) ·{" "}
-              {[importResult.extracted.phone, importResult.extracted.email, importResult.extracted.address]
-                .filter(Boolean).length}{" "}
-              contact detail(s) pulled
-            </p>
-            <Link href={`/dashboard/sites/${importResult.siteId}`} className="btn text-sm inline-block">
-              Open &amp; redesign with AI →
-            </Link>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {sites.length === 0 ? (
