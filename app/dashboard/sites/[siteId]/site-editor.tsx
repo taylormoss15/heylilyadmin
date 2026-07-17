@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   SECTION_TYPES,
@@ -12,7 +12,11 @@ import {
 } from "@/lib/site/ir";
 
 type Device = "phone" | "tablet" | "desktop";
-const DEVICE_WIDTH: Record<Device, string> = { phone: "390px", tablet: "768px", desktop: "100%" };
+// Logical render widths. Desktop renders at a real 1280px viewport and is
+// scaled to fit the panel, so it looks like an actual desktop, not a cramped
+// half-width column.
+const DEVICE_WIDTH: Record<Device, number> = { phone: 390, tablet: 834, desktop: 1280 };
+const PREVIEW_VIEWPORT_H = 720;
 
 interface ValidationReport {
   ok: boolean;
@@ -47,6 +51,16 @@ export default function SiteEditor(props: {
 
   const [device, setDevice] = useState<Device>("desktop");
   const [previewKey, setPreviewKey] = useState(0);
+  const previewBoxRef = useRef<HTMLDivElement>(null);
+  const [boxWidth, setBoxWidth] = useState(0);
+  useEffect(() => {
+    const el = previewBoxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => setBoxWidth(entries[0].contentRect.width));
+    ro.observe(el);
+    setBoxWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ValidationReport | null>(null);
@@ -413,6 +427,14 @@ export default function SiteEditor(props: {
               </button>
             ))}
           </div>
+          <a
+            href={`/api/pages/${props.pageId}/preview?t=${previewKey}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm text-brand-600 hover:underline whitespace-nowrap"
+          >
+            Full preview ↗
+          </a>
           <div className="ml-auto flex gap-2">
             <button onClick={validate} disabled={validating} className="btn-secondary text-sm">
               {validating ? "Checking…" : "Validate"}
@@ -461,16 +483,31 @@ export default function SiteEditor(props: {
           </div>
         )}
 
-        <div className="overflow-hidden rounded-xl border border-slate-300 bg-slate-100 p-3">
-          <div className="mx-auto bg-white shadow-sm transition-all" style={{ width: DEVICE_WIDTH[device], maxWidth: "100%" }}>
-            <iframe
-              key={previewKey}
-              title="Site preview"
-              src={`/api/pages/${props.pageId}/preview?t=${previewKey}`}
-              className="h-[640px] w-full border-0"
-            />
-          </div>
-        </div>
+        {(() => {
+          const logicalW = DEVICE_WIDTH[device];
+          const avail = Math.max(boxWidth - 24, 0); // minus padding
+          const scale = avail > 0 ? Math.min(1, avail / logicalW) : 1;
+          const scaledW = Math.round(logicalW * scale);
+          const scaledH = Math.round(PREVIEW_VIEWPORT_H * scale);
+          return (
+            <div ref={previewBoxRef} className="overflow-hidden rounded-xl border border-slate-300 bg-slate-100 p-3">
+              <div className="mx-auto bg-white shadow-sm" style={{ width: scaledW, height: scaledH }}>
+                <iframe
+                  key={previewKey}
+                  title="Site preview"
+                  src={`/api/pages/${props.pageId}/preview?t=${previewKey}`}
+                  style={{
+                    width: logicalW,
+                    height: PREVIEW_VIEWPORT_H,
+                    border: 0,
+                    transform: `scale(${scale})`,
+                    transformOrigin: "top left",
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })()}
 
         {report && <ValidationPanel report={report} />}
       </div>
@@ -773,6 +810,11 @@ function BusinessForm({ business, onChange }: { business: BusinessData; onChange
         <Field label="Phone" value={business.phone ?? ""} onChange={(v) => set({ phone: v })} />
         <Field label="Email" value={business.email ?? ""} onChange={(v) => set({ email: v })} />
       </div>
+      <Field
+        label="Booking URL (Rezdy, FareHarbor, Calendly…)"
+        value={business.bookingUrl ?? ""}
+        onChange={(v) => set({ bookingUrl: v })}
+      />
       <div className="grid grid-cols-2 gap-2">
         <Field label="Street" value={business.address?.street ?? ""} onChange={(v) => set({ address: { ...business.address, street: v } })} />
         <Field label="City" value={business.address?.city ?? ""} onChange={(v) => set({ address: { ...business.address, city: v } })} />

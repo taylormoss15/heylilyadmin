@@ -49,6 +49,9 @@ export const businessDataSchema = z.object({
     })
     .optional(),
   priceRange: z.string().optional(),
+  // A booking/reservation URL (e.g. a Rezdy, FareHarbor, or Calendly page).
+  // The designer wires "Book now" CTAs to it and can embed it inline.
+  bookingUrl: z.string().optional(),
   hours: z.array(z.object({ label: z.string(), value: z.string() })).default([]),
   services: z.array(z.object({ name: z.string(), description: z.string().optional() })).default([]),
   social: z.array(z.object({ label: z.string(), href: z.string() })).default([]),

@@ -34,6 +34,7 @@ export interface DesignInput {
   clientId: string;
   showCookieBanner: boolean;
   adminBaseUrl?: string;
+  imageUrls?: string[]; // real absolute image URLs from the business's site
 }
 
 const DESIGN_SYSTEM = `You are a world-class web designer and front-end engineer. You have designed and hand-coded some of the most beautiful, high-converting websites for local and small businesses in the world. Your work looks like a $10,000–$50,000 custom site, never a template.
@@ -58,7 +59,9 @@ COMPLIANCE — this is validated automatically, so it is non-negotiable:
 - WCAG AA color contrast — verify text is readable on its background; never place low-contrast text.
 - Keyboard-operable interactive elements with a visible :focus-visible style. Never convey meaning by color alone.
 
-IMAGES — do NOT invent image URLs; broken images ruin the design. Prefer CSS-driven visuals (gradients, shapes, SVG, typography). Only use an <img> if a real absolute image URL was provided to you, always with descriptive alt.
+IMAGES — use the real image URLs provided to you (from the business's own site) in tasteful, high-impact ways: a full-bleed hero background, feature imagery beside text, a gallery, or section accents. Real photography makes a site feel world-class — a great design uses images AND polished CSS, not text alone. Rules: use ONLY the exact absolute image URLs given to you (never invent or guess a URL — a broken image ruins everything); give every <img> descriptive alt text; for CSS background-image use, layer a gradient/overlay so any text on top keeps WCAG-AA contrast. If NO image URLs are provided, lean on rich CSS visuals instead.
+
+BOOKING — if a booking URL is provided, the primary action is booking: make prominent "Book now" / "Book online" / "Check availability" buttons that link to it, and consider a dedicated booking section that embeds it inline via <iframe src="THE_BOOKING_URL" title="Online booking" loading="lazy" style="width:100%;height:720px;border:0"></iframe> (the title attribute is required for accessibility). Still surface the phone number as a secondary way to reach them.
 
 DO NOT add a cookie banner, an accessibility/compliance badge, or JSON-LD schema — those are injected automatically. Focus entirely on the site itself.
 
@@ -81,12 +84,18 @@ function userPrompt(input: DesignInput): string {
   const direction = input.instruction?.trim()
     ? `\nStyle direction from the operator: ${input.instruction.trim()}`
     : "";
+  const images = input.imageUrls?.length
+    ? `\nReal image URLs from the business's own website — use these (and only these) as images, laid in tastefully:\n${input.imageUrls.map((u) => `- ${u}`).join("\n")}`
+    : `\nNo image URLs are available — use rich CSS visuals (gradients, shapes, typography) instead of <img>.`;
+  const booking = input.business.bookingUrl
+    ? `\nBooking URL (make booking the primary action; wire "Book now" CTAs to it and consider embedding it): ${input.business.bookingUrl}`
+    : "";
   return `Business details (use the real phone/email/address for CTAs and content):
 ${JSON.stringify(input.business)}
 
 Existing page content to design around (headings, copy, services, FAQ — reuse and improve this real content; don't invent facts):
 ${JSON.stringify(input.ir.sections)}
-${direction}
+${images}${booking}${direction}
 
 Design a stunning, high-converting home page for this business.`;
 }

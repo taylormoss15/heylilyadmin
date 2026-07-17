@@ -66,6 +66,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     },
   });
 
+  // Save the images we pulled from their site as reusable assets (absolute
+  // URLs), so the AI designer can lay them into the redesign tastefully.
+  if (imported.content.images.length) {
+    await prisma.siteAsset.createMany({
+      data: imported.content.images.slice(0, 12).map((url) => ({
+        siteId: site.id,
+        kind: "image",
+        cdnUrl: url,
+        alt: "",
+      })),
+    });
+  }
+
   const homePage = site.pages[0];
   const render = renderPageRecord(homePage, site);
   await prisma.pageVersion.create({

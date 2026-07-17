@@ -19,6 +19,8 @@ export interface ImportedContent {
   email?: string;
   address?: string;
   social: { label: string; href: string }[];
+  bookingUrl?: string;
+  images: string[];
 }
 
 export interface ImportResult {
@@ -70,11 +72,30 @@ export async function importFromUrl(rawUrl: string): Promise<ImportResult> {
 
       const socialHosts = ["facebook.com", "instagram.com", "twitter.com", "x.com", "linkedin.com", "youtube.com", "tiktok.com", "yelp.com"];
       const social: { label: string; href: string }[] = [];
+      const bookingHosts = ["rezdy.com", "fareharbor.com", "peek.com", "checkfront.com", "calendly.com", "acuityscheduling.com", "squareup.com", "getbookedin"];
+      let bookingUrl: string | undefined;
       for (const a of Array.from(document.querySelectorAll("a[href]")) as HTMLAnchorElement[]) {
         const host = socialHosts.find((h) => a.href.includes(h));
         if (host && !social.some((s) => s.href === a.href)) {
           social.push({ label: host.split(".")[0], href: a.href });
         }
+        if (!bookingUrl && bookingHosts.some((h) => a.href.includes(h))) {
+          bookingUrl = a.href;
+        }
+      }
+
+      // Real images from the site (absolute URLs only), skipping data URIs,
+      // SVGs, and obvious icon/logo/sprite/pixel assets.
+      const ogImage = (document.querySelector('meta[property="og:image"]') as HTMLMetaElement)?.content;
+      const skip = /(sprite|favicon|icon|logo|pixel|spacer|placeholder|\.svg(\?|$))/i;
+      const images: string[] = [];
+      if (ogImage && /^https?:\/\//i.test(ogImage)) images.push(ogImage);
+      for (const img of Array.from(document.querySelectorAll("img")) as HTMLImageElement[]) {
+        const src = img.currentSrc || img.src;
+        if (src && /^https?:\/\//i.test(src) && !skip.test(src) && !images.includes(src)) {
+          images.push(src);
+        }
+        if (images.length >= 12) break;
       }
 
       return {
@@ -88,6 +109,8 @@ export async function importFromUrl(rawUrl: string): Promise<ImportResult> {
         telLink,
         mailLink,
         social: social.slice(0, 6),
+        bookingUrl,
+        images,
       };
     });
 
@@ -120,6 +143,8 @@ interface RawScrape {
   telLink?: string;
   mailLink?: string;
   social: { label: string; href: string }[];
+  bookingUrl?: string;
+  images: string[];
 }
 
 const PHONE_RE = /(\+?\d[\d\s().-]{7,}\d)/;
@@ -156,6 +181,8 @@ function shapeContent(raw: RawScrape, url: string): ImportedContent {
     email,
     address,
     social: raw.social,
+    bookingUrl: raw.bookingUrl,
+    images: raw.images,
   };
 }
 
@@ -172,6 +199,7 @@ function toBusinessData(c: ImportedContent): BusinessData {
     phone: c.phone,
     email: c.email,
     address: c.address ? { street: c.address } : undefined,
+    bookingUrl: c.bookingUrl,
     hours: [],
     services: c.services.map((name) => ({ name })),
     social: c.social,

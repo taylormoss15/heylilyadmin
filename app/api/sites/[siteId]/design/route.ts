@@ -27,6 +27,12 @@ export async function POST(request: NextRequest, { params }: { params: { siteId:
   const page = await prisma.page.findFirst({ where: { id: parsed.data.pageId, siteId: site.id } });
   if (!page) return NextResponse.json({ error: "Page not found" }, { status: 404 });
 
+  const assets = await prisma.siteAsset.findMany({
+    where: { siteId: site.id, kind: "image" },
+    orderBy: { createdAt: "asc" },
+    take: 12,
+  });
+
   let result;
   try {
     result = await generateCustomSite({
@@ -35,6 +41,7 @@ export async function POST(request: NextRequest, { params }: { params: { siteId:
       instruction: parsed.data.instruction,
       clientId: site.clientId,
       showCookieBanner: site.showCookieBanner,
+      imageUrls: assets.map((a) => a.cdnUrl),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Design generation failed";
