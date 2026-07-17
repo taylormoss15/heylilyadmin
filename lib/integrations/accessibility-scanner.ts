@@ -66,6 +66,12 @@ async function runAxe(page: Page): Promise<RawAxeResults> {
   }) as Promise<RawAxeResults>;
 }
 
+/** Run axe against an already-loaded Playwright page and summarize it. Lets
+ * callers (e.g. the site importer) score and scrape a page in one session. */
+export async function scanOpenPage(page: Page): Promise<ScanSummary> {
+  return summarize(await runAxe(page));
+}
+
 function summarize(results: RawAxeResults): ScanSummary {
   const seriousCount = results.violations.filter(
     (v) => v.impact === "serious" || v.impact === "critical"
