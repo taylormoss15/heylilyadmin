@@ -24,6 +24,39 @@ datasource db {
 // in the route handlers). If this moves to Postgres, these can become
 // real `enum` blocks again — see lib/types.ts for the value sets.
 
+// A sales prospect: an existing site we've run the compliance checker against
+// to show how risky it is. Lives on the Prospecting page. Converting one
+// creates a Client and marks the prospect CONVERTED (it falls off the list).
+model Prospect {
+  id               String   @id @default(cuid())
+  url              String   @unique // normalized (lowercase host, no trailing slash) for dedup
+  businessName     String? // best-guess from the page; editable
+  industry         String? // manually enriched
+  estimatedRevenue String? // manually enriched (free-form, e.g. "$1M–$5M")
+  employees        String? // manually enriched (free-form, e.g. "11–50")
+  phone            String?
+  email            String?
+  notes            String?
+
+  scanStatus     String  @default("PENDING") // PENDING | COMPLETED | FAILED
+  scanError      String?
+  score          Float? // 0-100 accessibility score (higher = safer)
+  violationCount Int     @default(0)
+  seriousCount   Int     @default(0)
+  passCount      Int     @default(0)
+  violations     String? // JSON-encoded axe summary
+  scannedAt      DateTime?
+
+  status            String  @default("PROSPECT") // PROSPECT | CONVERTED | DISMISSED
+  convertedClientId String? // set when converted to a Client
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([score])
+}
+
 model Client {
   id            String       @id @default(cuid())
   name          String
