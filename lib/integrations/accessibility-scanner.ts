@@ -1,8 +1,27 @@
 import { chromium, type Page } from "playwright";
 import path from "path";
 import { prisma } from "@/lib/prisma";
-import { updateContactCustomFields } from "@/lib/integrations/ghl";
+import { updateContactCustomFields, triggerWorkflow } from "@/lib/integrations/ghl";
 import type { Client } from "@prisma/client";
+
+/** Internal-only alert: a monitored client site's audit found issues to remediate. */
+async function notifyComplianceIssue(
+  client: Client,
+  violationCount: number,
+  seriousCount: number,
+  url: string
+) {
+  const webhookUrl = process.env.GHL_COMPLIANCE_ALERT_WORKFLOW_WEBHOOK_URL ?? "";
+  await triggerWorkflow(client.id, webhookUrl, {
+    event: "accessibility_issue",
+    clientId: client.id,
+    clientName: client.name,
+    url,
+    violationCount,
+    seriousCount,
+    detectedAt: new Date().toISOString(),
+  });
+}
 
 // Real WCAG scanning (not an overlay claim) via axe-core, run headless
 // against the client's live site. Results are stored per-scan so the
@@ -171,6 +190,13 @@ export async function scanClientAndPersist(client: Client) {
         accessibility_violation_count: summary.violationCount,
         accessibility_last_scanned: scan.scannedAt.toISOString(),
       });
+    }
+
+    // Only notify the internal team if a live client site's audit finds
+    // issues — so we fix it before it ever becomes a problem. Silent when
+    // clean (the badge/audit trail just keep showing passing scans).
+    if (summary.violationCount > 0) {
+      await notifyComplianceIssue(client, summary.violationCount, summary.seriousCount, url);
     }
 
     return scan;

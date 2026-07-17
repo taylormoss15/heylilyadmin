@@ -56,6 +56,8 @@ export async function GET(_request: NextRequest, { params }: { params: { clientI
       client: { name: client.name },
       windowDays: 30,
       checkCadence: "weekly",
+      // What each automated audit checks the page against (axe-core rule sets).
+      standards: ["WCAG 2.0 Level A", "WCAG 2.0 Level AA", "WCAG 2.1 Level AA"],
       checks: log,
     },
     { headers: CORS_HEADERS }

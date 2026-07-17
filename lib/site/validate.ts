@@ -8,7 +8,6 @@ import type { RenderResult } from "@/lib/site/renderer";
 // URLs) are surfaced too.
 
 const GHL_MAX_BYTES = 5 * 1024 * 1024; // 5MB per Custom HTML Page
-const A11Y_PASS_THRESHOLD = 90; // score below this blocks publish
 
 export interface ValidationReport {
   ok: boolean;
@@ -29,7 +28,11 @@ export async function validateRender(render: RenderResult): Promise<ValidationRe
 
   const scan = await scanHtmlContent(render.html);
   const a11yScore = scan.score;
-  const a11yOk = scan.seriousCount === 0 && a11yScore >= A11Y_PASS_THRESHOLD;
+  // Publish requires a genuinely spotless scan — ZERO violations, not just
+  // "no serious ones". That's what lets the client-facing badge honestly say
+  // "compliant" and the audit trail show 0 violations every time: we only
+  // ever ship pages that truly have none.
+  const a11yOk = scan.violationCount === 0;
 
   const blockers: string[] = [];
   if (!sizeOk) {
@@ -37,10 +40,10 @@ export async function validateRender(render: RenderResult): Promise<ValidationRe
       `Page is ${(sizeBytes / 1024 / 1024).toFixed(2)}MB, over GHL's 5MB per-page limit.`
     );
   }
-  if (scan.seriousCount > 0) {
-    blockers.push(`${scan.seriousCount} serious/critical accessibility issue(s) must be fixed.`);
-  } else if (a11yScore < A11Y_PASS_THRESHOLD) {
-    blockers.push(`Accessibility score ${a11yScore} is below the ${A11Y_PASS_THRESHOLD} publish threshold.`);
+  if (scan.violationCount > 0) {
+    blockers.push(
+      `${scan.violationCount} accessibility issue(s) must be fixed before publishing (${scan.seriousCount} serious). Published sites must scan 100% clean.`
+    );
   }
 
   return {
