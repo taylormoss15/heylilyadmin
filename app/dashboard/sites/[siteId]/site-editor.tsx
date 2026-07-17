@@ -18,6 +18,17 @@ type Device = "phone" | "tablet" | "desktop";
 const DEVICE_WIDTH: Record<Device, number> = { phone: 390, tablet: 834, desktop: 1280 };
 const PREVIEW_VIEWPORT_H = 720;
 
+// Rotating captions for the "AI is designing" preview overlay, so the wait
+// feels alive and it's obvious the designer is actively thinking.
+const DESIGN_STEPS = [
+  "Studying the content, brand & goals…",
+  "Sketching layout & visual hierarchy…",
+  "Composing sections and imagery…",
+  "Writing clean, responsive markup…",
+  "Baking in accessibility & polish…",
+  "Finalizing your world-class design…",
+];
+
 interface ValidationReport {
   ok: boolean;
   sizeBytes: number;
@@ -75,6 +86,16 @@ export default function SiteEditor(props: {
   const [designDirection, setDesignDirection] = useState("");
   const [designing, setDesigning] = useState(false);
   const [designMsg, setDesignMsg] = useState<string | null>(null);
+  // Overlay shown over the preview while the AI is designing, with a rotating
+  // status caption so it's obvious it's actively working (not frozen).
+  const [designBusy, setDesignBusy] = useState(false);
+  const [designStep, setDesignStep] = useState(0);
+  useEffect(() => {
+    if (!designBusy) return;
+    setDesignStep(0);
+    const id = setInterval(() => setDesignStep((s) => (s + 1) % DESIGN_STEPS.length), 2600);
+    return () => clearInterval(id);
+  }, [designBusy]);
 
   const [publishing, setPublishing] = useState(false);
   const [publishReady, setPublishReady] = useState<{ instructions: string[]; exportUrl: string } | null>(null);
@@ -159,30 +180,37 @@ export default function SiteEditor(props: {
 
   async function generateDesign() {
     setDesigning(true);
+    setDesignBusy(true);
     setDesignMsg(null);
     setReport(null);
-    // Persist any structured/business/theme edits first so the designer works
-    // from the latest content.
-    await save();
-    const res = await fetch(`/api/sites/${props.siteId}/design`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pageId: props.pageId, instruction: designDirection || undefined }),
-    });
-    setDesigning(false);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setDesignMsg(typeof data.error === "string" ? data.error : "Design generation failed");
-      return;
+    try {
+      // Persist any structured/business/theme edits first so the designer works
+      // from the latest content.
+      await save();
+      const res = await fetch(`/api/sites/${props.siteId}/design`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId: props.pageId, instruction: designDirection || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDesignMsg(typeof data.error === "string" ? data.error : "Design generation failed");
+        return;
+      }
+      setCustomActive(true);
+      setDesignMsg(
+        `${data.summary}${data.dryRun ? " (mock mode)" : ""} — a11y ${data.report?.a11yScore ?? "—"}/100${
+          data.report?.ok ? ", passes checks" : ", needs a fix pass"
+        }`
+      );
+      if (data.report) setReport(data.report);
+      setPreviewKey((k) => k + 1);
+    } catch {
+      setDesignMsg("Design generation failed — please try again.");
+    } finally {
+      setDesigning(false);
+      setDesignBusy(false);
     }
-    setCustomActive(true);
-    setDesignMsg(
-      `${data.summary}${data.dryRun ? " (mock mode)" : ""} — a11y ${data.report?.a11yScore ?? "—"}/100${
-        data.report?.ok ? ", passes checks" : ", needs a fix pass"
-      }`
-    );
-    if (data.report) setReport(data.report);
-    setPreviewKey((k) => k + 1);
   }
 
   async function revertDesign() {
@@ -490,7 +518,7 @@ export default function SiteEditor(props: {
           const scaledW = Math.round(logicalW * scale);
           const scaledH = Math.round(PREVIEW_VIEWPORT_H * scale);
           return (
-            <div ref={previewBoxRef} className="overflow-hidden rounded-xl border border-slate-300 bg-slate-100 p-3">
+            <div ref={previewBoxRef} className="relative overflow-hidden rounded-xl border border-slate-300 bg-slate-100 p-3">
               <div className="mx-auto bg-white shadow-sm" style={{ width: scaledW, height: scaledH }}>
                 <iframe
                   key={previewKey}
@@ -505,6 +533,26 @@ export default function SiteEditor(props: {
                   }}
                 />
               </div>
+
+              {designBusy && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm px-6">
+                  <div className="w-full max-w-sm rounded-2xl bg-white/95 p-6 text-center shadow-2xl">
+                    <div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-[3px] border-brand-100 border-t-brand-500" />
+                    <p className="text-sm font-semibold text-slate-900">
+                      ✨ Designing the world-class version of this site
+                    </p>
+                    <p className="mt-1 h-5 text-sm text-slate-500 transition-all">
+                      {DESIGN_STEPS[designStep]}
+                    </p>
+                    <div className="relative mt-4 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                      <div className="heylily-progress-bar" />
+                    </div>
+                    <p className="mt-3 text-xs text-slate-400">
+                      This usually takes 20–60 seconds. Compliance is baked in automatically.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}

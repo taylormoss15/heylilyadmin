@@ -1,7 +1,8 @@
 /**
  * Hey Lily accessibility compliance badge.
  *
- * Injected on every client site. A fixed footer badge that opens the site's
+ * Injected on every client site. A badge that lives in the site footer (or a
+ * pinned bottom-left badge if the page has no footer) that opens the site's
  * real accessibility audit trail — the most recent 30 days of automated WCAG
  * scans, each with its date, result, and what was checked. The badge only
  * says "compliant" when the latest audit genuinely passed (0 issues); it
@@ -34,15 +35,18 @@
     badge.setAttribute("aria-label", "View this site's accessibility compliance audit");
     badge.innerHTML = SHIELD + '<span>Accessibility Compliant</span>';
 
-    // Positioning uses !important so the host site's CSS can't dislodge it —
-    // it stays fixed to the bottom of the viewport and never scrolls away.
+    // The badge lives inside the site's footer (see injection below): it sits
+    // in the footer content and scrolls with the page like any other footer
+    // item. Only when a page has no footer do we fall back to a fixed,
+    // bottom-left pinned badge so it's never lost entirely.
     var style = document.createElement("style");
     style.textContent =
-      "#heylily-a11y-badge{position:fixed!important;bottom:16px!important;left:16px!important;z-index:2147483000!important;" +
+      "#heylily-a11y-badge{" +
       "display:inline-flex!important;align-items:center;gap:8px;margin:0;" +
       "background:#123524;color:#eafff2;border:1px solid #2e5c46;border-radius:999px;" +
       "padding:9px 15px;font:600 13px/1.2 system-ui,-apple-system,sans-serif;cursor:pointer;" +
       "box-shadow:0 3px 12px rgba(0,0,0,.22)}" +
+      "#heylily-a11y-badge.heylily-a11y-pinned{position:fixed!important;bottom:16px!important;left:16px!important;z-index:2147483000!important}" +
       "#heylily-a11y-badge:hover{background:#184330}" +
       "#heylily-a11y-badge:focus-visible{outline:2px solid #4ade80;outline-offset:2px}" +
       "#heylily-a11y-modal{position:fixed;inset:0;z-index:2147483001;display:none;" +
@@ -152,7 +156,23 @@
     });
 
     document.head.appendChild(style);
-    document.body.appendChild(badge);
+
+    // Place the badge inside the site footer so it lives in the footer and
+    // scrolls with the page. Prefer our own renderer's footer, then any
+    // <footer>; fall back to a pinned badge only when there's no footer.
+    var footer =
+      document.querySelector(".site-footer") ||
+      document.querySelector("footer") ||
+      document.querySelector('[role="contentinfo"]');
+    if (footer) {
+      var slot = document.createElement("div");
+      slot.style.cssText = "text-align:center;margin-top:20px";
+      slot.appendChild(badge);
+      footer.appendChild(slot);
+    } else {
+      badge.className = "heylily-a11y-pinned";
+      document.body.appendChild(badge);
+    }
     document.body.appendChild(modal);
   }
 

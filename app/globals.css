@@ -41,3 +41,18 @@ body {
 .input {
   @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
 }
+
+/* Indeterminate progress bar for the "AI is designing" preview overlay. */
+@keyframes heylily-indeterminate {
+  0% { left: -40%; width: 40%; }
+  50% { left: 30%; width: 55%; }
+  100% { left: 100%; width: 40%; }
+}
+.heylily-progress-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3b6fe0, #6ea0ff);
+  animation: heylily-indeterminate 1.5s ease-in-out infinite;
+}
