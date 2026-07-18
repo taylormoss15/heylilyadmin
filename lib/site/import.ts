@@ -29,6 +29,7 @@ export interface ImportResult {
   scan: ScanSummary;
   businessData: BusinessData;
   homeIr: PageIR;
+  screenshot?: string; // data: URL (JPEG) of the original site, for demos
 }
 
 function launchBrowser() {
@@ -116,11 +117,22 @@ export async function importFromUrl(rawUrl: string): Promise<ImportResult> {
 
     const scan = await scanOpenPage(page);
 
+    // "Before" screenshot for demos: capture the top of the page at a desktop
+    // width as a compact JPEG data URL (self-contained, no asset storage).
+    let screenshot: string | undefined;
+    try {
+      await page.setViewportSize({ width: 1280, height: 1800 });
+      const buf = await page.screenshot({ type: "jpeg", quality: 55 });
+      screenshot = `data:image/jpeg;base64,${buf.toString("base64")}`;
+    } catch {
+      screenshot = undefined;
+    }
+
     const content = shapeContent(raw, url);
     const businessData = toBusinessData(content);
     const homeIr = toSeedIr(content);
 
-    return { sourceUrl: url, content, scan, businessData, homeIr };
+    return { sourceUrl: url, content, scan, businessData, homeIr, screenshot };
   } finally {
     await browser.close();
   }

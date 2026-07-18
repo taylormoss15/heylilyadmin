@@ -49,12 +49,44 @@ model Prospect {
 
   status            String  @default("PROSPECT") // PROSPECT | CONVERTED | DISMISSED
   convertedClientId String? // set when converted to a Client
+  demoToken         String? // token of the latest generated demo, for quick linking
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([status])
   @@index([score])
+}
+
+// A shareable sales demo generated for a prospect: their real site's "before"
+// (screenshot + risk score + outcome-framed problems) next to an AI-built
+// "after" redesign. Served publicly (no login) at /demo/[token] and as a
+// print-friendly scorecard at /demo/[token]/report — the acquisition asset.
+model Demo {
+  id           String  @id @default(cuid())
+  token        String  @unique
+  prospectId   String?
+  sourceUrl    String
+  businessName String?
+
+  // Before (their current site)
+  beforeScore     Float?
+  beforeViolations Int    @default(0)
+  beforeSerious   Int     @default(0)
+  beforeShot      String? // data: URL (JPEG) screenshot of the original site
+  issues          String? // JSON array of outcome-framed problem statements
+
+  // After (the AI redesign)
+  redesignHtml String? // finalized, compliance-checked HTML of the new site
+  afterScore   Float?
+  dryRun       Boolean @default(false) // true when built in mock mode (no AI key)
+
+  status    String   @default("PENDING") // PENDING | READY | FAILED
+  error     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([prospectId])
 }
 
 model Client {

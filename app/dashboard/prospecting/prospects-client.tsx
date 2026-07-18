@@ -20,6 +20,7 @@ export interface ProspectRow {
   seriousCount: number;
   status: string;
   scannedAt: string | null;
+  demoToken: string | null;
 }
 
 type SortKey = "score" | "businessName" | "url" | "industry" | "estimatedRevenue" | "employees";
@@ -477,6 +478,9 @@ function DetailsPanel({
         <button onClick={onRunScan} disabled={scanning} className="btn-secondary w-full text-sm">
           {scanning ? "Scanning…" : r.scanStatus === "COMPLETED" ? "Re-scan" : "Scan now"}
         </button>
+
+        <DemoBlock prospectId={r.id} demoToken={r.demoToken} onGenerated={(t) => onPatch({ demoToken: t })} />
+
         <button onClick={onConvert} className="btn w-full text-sm">Convert to account →</button>
         <div className="flex gap-2">
           {r.status === "DISMISSED" ? (
@@ -489,6 +493,86 @@ function DetailsPanel({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// One-click sales demo: builds the interactive before/after redesign + the
+// scorecard, both on public share links. Takes ~1 minute (scrape + AI design).
+function DemoBlock({
+  prospectId,
+  demoToken,
+  onGenerated,
+}: {
+  prospectId: string;
+  demoToken: string | null;
+  onGenerated: (token: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  async function generate() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/prospects/${prospectId}/demo`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.token) {
+        setError(typeof data.error === "string" ? data.error : "Demo generation failed");
+        return;
+      }
+      onGenerated(data.token);
+    } catch {
+      setError("Demo generation failed — please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function copy(path: string, label: string) {
+    const url = `${window.location.origin}${path}`;
+    navigator.clipboard?.writeText(url).then(() => {
+      setCopied(label);
+      setTimeout(() => setCopied(null), 1500);
+    });
+  }
+
+  return (
+    <div className="rounded-lg border border-brand-100 bg-brand-50 p-2.5">
+      {busy ? (
+        <div className="text-center text-xs text-slate-600">
+          <div className="mx-auto mb-2 h-5 w-5 animate-spin rounded-full border-2 border-brand-200 border-t-brand-500" />
+          Building demo — scraping the site &amp; designing the new one… (~1 min)
+        </div>
+      ) : demoToken ? (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <a href={`/demo/${demoToken}`} target="_blank" rel="noreferrer" className="btn flex-1 text-center text-xs">
+              Open demo ↗
+            </a>
+            <a href={`/demo/${demoToken}/report`} target="_blank" rel="noreferrer" className="btn-secondary flex-1 text-center text-xs">
+              Scorecard ↗
+            </a>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => copy(`/demo/${demoToken}`, "demo")} className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
+              {copied === "demo" ? "Copied!" : "Copy demo link"}
+            </button>
+            <button onClick={() => copy(`/demo/${demoToken}/report`, "report")} className="flex-1 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
+              {copied === "report" ? "Copied!" : "Copy scorecard link"}
+            </button>
+          </div>
+          <button onClick={generate} className="w-full text-[11px] text-slate-500 hover:text-slate-800">
+            Regenerate
+          </button>
+        </div>
+      ) : (
+        <button onClick={generate} className="btn w-full text-sm">
+          ✨ Generate demo (before/after + scorecard)
+        </button>
+      )}
+      {error && <p className="mt-1 text-[11px] text-red-600">{error}</p>}
     </div>
   );
 }
@@ -510,6 +594,7 @@ function toRow(p: {
   seriousCount: number;
   status: string;
   scannedAt: string | null;
+  demoToken: string | null;
 }): ProspectRow {
   return {
     id: p.id,
@@ -528,5 +613,6 @@ function toRow(p: {
     seriousCount: p.seriousCount,
     status: p.status,
     scannedAt: p.scannedAt,
+    demoToken: p.demoToken,
   };
 }

@@ -35,6 +35,7 @@ export interface DesignInput {
   showCookieBanner: boolean;
   adminBaseUrl?: string;
   imageUrls?: string[]; // real absolute image URLs from the business's site
+  showBadge?: boolean; // default true; false for prospect demos
 }
 
 const DESIGN_SYSTEM = `You are a world-class web designer and front-end engineer. You have designed and hand-coded some of the most beautiful, high-converting websites for local and small businesses in the world. Your work looks like a $10,000–$50,000 custom site, never a template.
@@ -106,6 +107,7 @@ async function validate(rawHtml: string, input: DesignInput): Promise<Validation
     business: input.business,
     adminBaseUrl: input.adminBaseUrl,
     showCookieBanner: input.showCookieBanner,
+    showBadge: input.showBadge,
   });
   return validateRender({ html: finalized, warnings: [] });
 }

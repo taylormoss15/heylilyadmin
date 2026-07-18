@@ -11,6 +11,7 @@ export interface FinalizeOptions {
   business: BusinessData;
   adminBaseUrl?: string;
   showCookieBanner?: boolean;
+  showBadge?: boolean; // default true; false for prospect demos (no client audit log yet)
 }
 
 export function finalizeCustomHtml(rawHtml: string, opts: FinalizeOptions): string {
@@ -40,8 +41,8 @@ export function finalizeCustomHtml(rawHtml: string, opts: FinalizeOptions): stri
   if (opts.showCookieBanner && !/id="heylily-cookie"/.test(html)) {
     footerBits.push(cookieBanner());
   }
-  // Accessibility badge — always, unless already present.
-  if (!/id="heylily-a11y-badge"|widget\/accessibility-badge\.js/.test(html)) {
+  // Accessibility badge — always, unless suppressed or already present.
+  if (opts.showBadge !== false && !/id="heylily-a11y-badge"|widget\/accessibility-badge\.js/.test(html)) {
     footerBits.push(complianceBadge(opts.clientId, adminBaseUrl));
   }
 

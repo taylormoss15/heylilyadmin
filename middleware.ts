@@ -12,6 +12,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/api/compliance",
   "/api/assets", // locally-stored site images (R2 fallback), referenced by client sites
   "/widget", // client-embeddable badge script, served from /public/widget
+  "/demo", // public prospect sales demos (before/after + scorecard), shared by link
   "/_next",
   "/favicon.ico",
 ];

@@ -27,6 +27,7 @@ export default async function ProspectingPage() {
     seriousCount: p.seriousCount,
     status: p.status,
     scannedAt: p.scannedAt ? p.scannedAt.toISOString() : null,
+    demoToken: p.demoToken,
   }));
 
   return <ProspectsClient initial={rows} />;
