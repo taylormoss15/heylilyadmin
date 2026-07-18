@@ -2,6 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { outcomeFor } from "@/lib/prospecting/issues";
+
+export interface Issue {
+  id: string;
+  impact: string | null;
+  help: string;
+  nodeCount: number;
+}
 
 export interface ProspectRow {
   id: string;
@@ -21,6 +29,7 @@ export interface ProspectRow {
   status: string;
   scannedAt: string | null;
   demoToken: string | null;
+  issues: Issue[];
 }
 
 type SortKey = "score" | "businessName" | "url" | "industry" | "estimatedRevenue" | "employees";
@@ -43,7 +52,15 @@ function hostOf(url: string): string {
   }
 }
 
-export default function ProspectsClient({ initial }: { initial: ProspectRow[] }) {
+export default function ProspectsClient({
+  initial,
+  prevalence,
+  totalScanned,
+}: {
+  initial: ProspectRow[];
+  prevalence: Record<string, number>;
+  totalScanned: number;
+}) {
   const router = useRouter();
   const [rows, setRows] = useState<ProspectRow[]>(initial);
   const [urlsText, setUrlsText] = useState("");
@@ -267,6 +284,8 @@ export default function ProspectsClient({ initial }: { initial: ProspectRow[] })
                   onRestore={() => restore(r.id)}
                   onRemove={() => remove(r.id)}
                   onPatch={(patch) => patchRow(r.id, patch)}
+                  prevalence={prevalence}
+                  totalScanned={totalScanned}
                 />
               );
             })}
@@ -300,6 +319,8 @@ function FragmentRow({
   onRestore,
   onRemove,
   onPatch,
+  prevalence,
+  totalScanned,
 }: {
   r: ProspectRow;
   risk: { label: string; cls: string };
@@ -311,6 +332,8 @@ function FragmentRow({
   onRestore: () => void;
   onRemove: () => void;
   onPatch: (patch: Partial<ProspectRow>) => void;
+  prevalence: Record<string, number>;
+  totalScanned: number;
 }) {
   const [scanning, setScanning] = useState(false);
   const dimmed = r.status === "DISMISSED";
@@ -367,6 +390,8 @@ function FragmentRow({
               onRestore={onRestore}
               onRemove={onRemove}
               onPatch={onPatch}
+              prevalence={prevalence}
+              totalScanned={totalScanned}
             />
           </td>
         </tr>
@@ -384,6 +409,8 @@ function DetailsPanel({
   onRestore,
   onRemove,
   onPatch,
+  prevalence,
+  totalScanned,
 }: {
   r: ProspectRow;
   scanning: boolean;
@@ -393,6 +420,8 @@ function DetailsPanel({
   onRestore: () => void;
   onRemove: () => void;
   onPatch: (patch: Partial<ProspectRow>) => void;
+  prevalence: Record<string, number>;
+  totalScanned: number;
 }) {
   const [fields, setFields] = useState({
     businessName: r.businessName ?? "",
@@ -427,6 +456,8 @@ function DetailsPanel({
   const input = "input w-full text-sm";
 
   return (
+    <div className="space-y-4">
+    <IssuesSection r={r} prevalence={prevalence} totalScanned={totalScanned} />
     <div className="grid gap-4 md:grid-cols-3">
       <div className="space-y-3 md:col-span-2">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -493,6 +524,88 @@ function DetailsPanel({
           </button>
         </div>
       </div>
+    </div>
+    </div>
+  );
+}
+
+// The specific issues behind a prospect's score, with the "how common is this"
+// prevalence stat and a ready-to-say expert talking point per issue. This is
+// the internal operator view — full detail — so we CAN show the technical name
+// here (unlike the customer-facing scorecard, which stays outcome-only).
+function IssuesSection({
+  r,
+  prevalence,
+  totalScanned,
+}: {
+  r: ProspectRow;
+  prevalence: Record<string, number>;
+  totalScanned: number;
+}) {
+  if (r.scanStatus !== "COMPLETED") return null;
+  if (r.issues.length === 0) {
+    return (
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        ✓ No accessibility issues found — this site already passes. A rare one.
+      </div>
+    );
+  }
+
+  const sev = (i: Issue) => (i.impact === "critical" ? 0 : i.impact === "serious" ? 1 : 2);
+  const ordered = [...r.issues].sort((a, b) => sev(a) - sev(b) || b.nodeCount - a.nodeCount);
+  const top = ordered[0];
+  const topSeen = prevalence[top.id] ?? 1;
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+      <h4 className="text-sm font-semibold text-slate-900">
+        Why this scores {r.score}/100 — {r.issues.length} issue{r.issues.length === 1 ? "" : "s"} found
+      </h4>
+
+      {/* Ready-to-say talking point */}
+      <p className="mt-1 text-xs text-slate-600">
+        Say it like an expert:{" "}
+        <span className="italic">
+          “{topSeen} of the {totalScanned} sites we&apos;ve scanned have this same issue. These are quick,
+          low-cost fixes — they don&apos;t change how your site looks or works — but left alone they&apos;re an
+          unforced error that exposes you to complaints and ADA claims.”
+        </span>
+      </p>
+
+      <ul className="mt-3 space-y-2">
+        {ordered.map((v, i) => {
+          const seen = prevalence[v.id] ?? 1;
+          const outcome = outcomeFor(v.id);
+          const serious = v.impact === "serious" || v.impact === "critical";
+          return (
+            <li key={i} className="rounded-md border border-slate-200 bg-white p-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[11px] font-medium uppercase ${
+                    serious ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                  }`}
+                >
+                  {v.impact ?? "minor"}
+                </span>
+                <span className="text-sm font-medium text-slate-800">{v.help}</span>
+                {v.nodeCount > 0 && (
+                  <span className="text-xs text-slate-400">· {v.nodeCount} element{v.nodeCount === 1 ? "" : "s"}</span>
+                )}
+                {totalScanned > 0 && (
+                  <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+                    seen on {seen}/{totalScanned} sites
+                  </span>
+                )}
+              </div>
+              {outcome && <p className="mt-1 text-xs text-slate-500">{outcome}</p>}
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="mt-2 text-[11px] text-slate-400">
+        Our builder fixes all of these automatically — generate the demo to show them the compliant version.
+      </p>
     </div>
   );
 }
@@ -595,6 +708,7 @@ function toRow(p: {
   status: string;
   scannedAt: string | null;
   demoToken: string | null;
+  violations?: string | null;
 }): ProspectRow {
   return {
     id: p.id,
@@ -614,5 +728,23 @@ function toRow(p: {
     status: p.status,
     scannedAt: p.scannedAt,
     demoToken: p.demoToken,
+    issues: parseIssuesJson(p.violations),
   };
+}
+
+function parseIssuesJson(json: string | null | undefined): Issue[] {
+  try {
+    const arr = JSON.parse(json || "[]");
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((v) => v && typeof v.id === "string")
+      .map((v) => ({
+        id: v.id,
+        impact: typeof v.impact === "string" ? v.impact : null,
+        help: typeof v.help === "string" ? v.help : v.id,
+        nodeCount: typeof v.nodeCount === "number" ? v.nodeCount : 0,
+      }));
+  } catch {
+    return [];
+  }
 }

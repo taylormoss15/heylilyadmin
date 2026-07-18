@@ -37,6 +37,13 @@ const OUTCOME: Record<string, string> = {
 const GENERIC =
   "This weakens the experience for real customers and adds to the site's accessibility (ADA/WCAG) exposure.";
 
+// The single customer-facing consequence for one axe rule id (if we have a
+// hand-written one). Used in the operator Details drawer as a ready-to-say
+// talking point next to the technical issue.
+export function outcomeFor(id: string): string | undefined {
+  return OUTCOME[id];
+}
+
 export function outcomeIssues(violations: RawViolation[], max = 5): string[] {
   // Serious/critical first, then by how many elements are affected.
   const ordered = [...violations].sort((a, b) => {
