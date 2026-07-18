@@ -20,6 +20,13 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
         industry: prospect.industry || result.industry || null,
         employees: prospect.employees || result.employees || null,
         estimatedRevenue: prospect.estimatedRevenue || result.estimatedRevenue || null,
+        // Objective site intelligence — refresh on every scan.
+        platform: result.platform ?? null,
+        builtBy: result.builtBy ?? null,
+        professionalism: result.professionalism ?? null,
+        professionalismNote: result.professionalismNote ?? null,
+        aeoScore: result.aeoScore ?? null,
+        aeoChecks: result.aeoChecks ? JSON.stringify(result.aeoChecks) : null,
         scanStatus: "COMPLETED",
         scanError: null,
         score: result.scan.score,

@@ -1,7 +1,17 @@
 import { prisma } from "@/lib/prisma";
+import type { AeoCheck } from "@/lib/prospecting/aeo";
 import ProspectsClient, { type ProspectRow, type Issue } from "./prospects-client";
 
 export const dynamic = "force-dynamic";
+
+function parseAeoChecks(json: string | null): AeoCheck[] {
+  try {
+    const arr = JSON.parse(json || "[]");
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
 
 function parseIssues(json: string | null): Issue[] {
   try {
@@ -55,6 +65,12 @@ export default async function ProspectingPage() {
     scannedAt: p.scannedAt ? p.scannedAt.toISOString() : null,
     demoToken: p.demoToken,
     issues: parseIssues(p.violations),
+    platform: p.platform,
+    builtBy: p.builtBy,
+    professionalism: p.professionalism,
+    professionalismNote: p.professionalismNote,
+    aeoScore: p.aeoScore,
+    aeoChecks: parseAeoChecks(p.aeoChecks),
   }));
 
   return <ProspectsClient initial={rows} prevalence={prevalence} totalScanned={scanned.length} />;

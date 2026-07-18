@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { outcomeFor } from "@/lib/prospecting/issues";
+import type { AeoCheck } from "@/lib/prospecting/aeo";
 
 export interface Issue {
   id: string;
@@ -30,6 +31,12 @@ export interface ProspectRow {
   scannedAt: string | null;
   demoToken: string | null;
   issues: Issue[];
+  platform: string | null;
+  builtBy: string | null;
+  professionalism: number | null;
+  professionalismNote: string | null;
+  aeoScore: number | null;
+  aeoChecks: AeoCheck[];
 }
 
 type SortKey = "score" | "businessName" | "url" | "industry" | "estimatedRevenue" | "employees";
@@ -368,6 +375,7 @@ function FragmentRow({
           <a href={r.url} target="_blank" rel="noreferrer" className="text-slate-600 hover:underline">
             {hostOf(r.url)}
           </a>
+          {r.platform && <div className="text-[11px] text-slate-400">Built on {r.platform}</div>}
         </td>
         <td className="px-4 py-3 text-slate-600">{r.industry || <span className="text-slate-300">—</span>}</td>
         <td className="px-4 py-3 text-slate-600">{r.estimatedRevenue || <span className="text-slate-300">—</span>}</td>
@@ -457,6 +465,7 @@ function DetailsPanel({
 
   return (
     <div className="space-y-4">
+    <SiteIntelSection r={r} />
     <IssuesSection r={r} prevalence={prevalence} totalScanned={totalScanned} />
     <div className="grid gap-4 md:grid-cols-3">
       <div className="space-y-3 md:col-span-2">
@@ -525,6 +534,69 @@ function DetailsPanel({
         </div>
       </div>
     </div>
+    </div>
+  );
+}
+
+// What the quick scan learned beyond accessibility: who built the site, how
+// professional it looks (AI), and an on-page / AEO scorecard.
+function SiteIntelSection({ r }: { r: ProspectRow }) {
+  if (r.scanStatus !== "COMPLETED") return null;
+  const hasIntel =
+    r.platform || r.builtBy || r.professionalism !== null || r.aeoScore !== null || r.aeoChecks.length > 0;
+  if (!hasIntel) return null;
+
+  const aeoColor =
+    r.aeoScore === null ? "text-slate-400" : r.aeoScore >= 80 ? "text-emerald-600" : r.aeoScore >= 50 ? "text-amber-600" : "text-red-600";
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <h4 className="text-sm font-semibold text-slate-900">Site intelligence</h4>
+
+      <div className="mt-2 grid gap-3 sm:grid-cols-3">
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-slate-400">Built with / by</div>
+          <div className="text-sm text-slate-700">{r.platform || "Custom / unknown"}</div>
+          {r.builtBy && <div className="text-xs text-slate-500">{r.builtBy}</div>}
+        </div>
+
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-slate-400">Professionalism</div>
+          {r.professionalism !== null ? (
+            <div className="text-sm text-amber-500" title={`${r.professionalism}/5`}>
+              {"★".repeat(r.professionalism)}
+              <span className="text-slate-300">{"★".repeat(5 - r.professionalism)}</span>
+            </div>
+          ) : (
+            <div className="text-sm text-slate-400">—</div>
+          )}
+          {r.professionalismNote && <div className="text-xs text-slate-500">{r.professionalismNote}</div>}
+        </div>
+
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-slate-400">On-page / AEO</div>
+          <div className={`text-sm font-semibold ${aeoColor}`}>
+            {r.aeoScore !== null ? `${r.aeoScore}/100` : "—"}
+          </div>
+          <div className="text-xs text-slate-500">
+            {r.aeoChecks.filter((c) => c.pass).length}/{r.aeoChecks.length} checks pass
+          </div>
+        </div>
+      </div>
+
+      {r.aeoChecks.length > 0 && (
+        <ul className="mt-3 grid gap-x-4 gap-y-1 sm:grid-cols-2">
+          {r.aeoChecks.map((c, i) => (
+            <li key={i} className="flex items-start gap-2 text-xs">
+              <span className={c.pass ? "text-emerald-500" : "text-red-500"}>{c.pass ? "✓" : "✕"}</span>
+              <span className="text-slate-700">
+                {c.label}
+                <span className="text-slate-400"> — {c.detail}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -709,6 +781,12 @@ function toRow(p: {
   scannedAt: string | null;
   demoToken: string | null;
   violations?: string | null;
+  platform?: string | null;
+  builtBy?: string | null;
+  professionalism?: number | null;
+  professionalismNote?: string | null;
+  aeoScore?: number | null;
+  aeoChecks?: string | null;
 }): ProspectRow {
   return {
     id: p.id,
@@ -729,7 +807,22 @@ function toRow(p: {
     scannedAt: p.scannedAt,
     demoToken: p.demoToken,
     issues: parseIssuesJson(p.violations),
+    platform: p.platform ?? null,
+    builtBy: p.builtBy ?? null,
+    professionalism: p.professionalism ?? null,
+    professionalismNote: p.professionalismNote ?? null,
+    aeoScore: p.aeoScore ?? null,
+    aeoChecks: parseAeoChecksJson(p.aeoChecks),
   };
+}
+
+function parseAeoChecksJson(json: string | null | undefined): AeoCheck[] {
+  try {
+    const arr = JSON.parse(json || "[]");
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
 }
 
 function parseIssuesJson(json: string | null | undefined): Issue[] {

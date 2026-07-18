@@ -47,6 +47,14 @@ model Prospect {
   violations     String? // JSON-encoded axe summary
   scannedAt      DateTime?
 
+  // Site intelligence gathered in the same quick scan.
+  platform           String? // detected builder/CMS (Wix, WordPress, GoDaddy, Squarespace…)
+  builtBy            String? // "powered by / website by" credit found on the page
+  professionalism    Int? // AI visual-quality rating, 1 (DIY) – 5 (polished custom)
+  professionalismNote String? // one-line AI take on the design
+  aeoScore           Int? // 0-100 on-page / AEO optimization score
+  aeoChecks          String? // JSON array of individual on-page checks
+
   status            String  @default("PROSPECT") // PROSPECT | CONVERTED | DISMISSED
   convertedClientId String? // set when converted to a Client
   demoToken         String? // token of the latest generated demo, for quick linking
