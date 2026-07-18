@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import ScanButton from "../scan-button";
@@ -5,18 +6,36 @@ import NoteForm from "../note-form";
 
 export const dynamic = "force-dynamic";
 
+interface StoredViolation {
+  id: string;
+  impact: string | null;
+  help: string;
+  nodeCount: number;
+}
+
+function parseViolations(json: string): StoredViolation[] {
+  try {
+    const arr = JSON.parse(json);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
 export default async function ClientCompliancePage({ params }: { params: { id: string } }) {
   const client = await prisma.client.findUnique({
     where: { id: params.id },
     include: {
       accessibilityScans: { orderBy: { scannedAt: "desc" }, take: 30 },
       remediationNotes: { orderBy: { createdAt: "desc" }, take: 20 },
+      sites: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
     },
   });
 
   if (!client) notFound();
 
   const latest = client.accessibilityScans.find((s) => s.status === "COMPLETED");
+  const latestIssues = latest && latest.violationCount > 0 ? parseViolations(latest.violations) : [];
 
   return (
     <div className="space-y-6">
@@ -47,6 +66,45 @@ export default async function ClientCompliancePage({ params }: { params: { id: s
             </>
           )}
         </div>
+      )}
+
+      {latestIssues.length > 0 && (
+        <section className="card space-y-3 border-amber-200">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-medium text-slate-900">What to fix</h2>
+              <p className="text-xs text-slate-500">
+                The exact issues from the latest scan. Fastest fix: open the builder and click
+                “Fix accessibility with AI,” then re-scan.
+              </p>
+            </div>
+            <Link
+              href={`/dashboard/clients/${client.id}/website`}
+              className="btn shrink-0 text-sm"
+            >
+              Fix in website builder →
+            </Link>
+          </div>
+          <ul className="space-y-1.5 text-sm">
+            {latestIssues.map((v, i) => (
+              <li key={i} className="flex gap-2">
+                <span
+                  className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium uppercase ${
+                    v.impact === "serious" || v.impact === "critical"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}
+                >
+                  {v.impact ?? "minor"}
+                </span>
+                <span className="text-slate-700">
+                  {v.help}
+                  {v.nodeCount ? <span className="text-slate-400"> · {v.nodeCount} element{v.nodeCount === 1 ? "" : "s"}</span> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <section className="card space-y-4">

@@ -13,10 +13,13 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     const updated = await prisma.prospect.update({
       where: { id: prospect.id },
       data: {
-        // Only fill business name if we don't already have one (respect edits).
+        // Only fill fields we don't already have (respect operator edits).
         businessName: prospect.businessName || result.businessName || null,
         phone: prospect.phone || result.phone || null,
         email: prospect.email || result.email || null,
+        industry: prospect.industry || result.industry || null,
+        employees: prospect.employees || result.employees || null,
+        estimatedRevenue: prospect.estimatedRevenue || result.estimatedRevenue || null,
         scanStatus: "COMPLETED",
         scanError: null,
         score: result.scan.score,

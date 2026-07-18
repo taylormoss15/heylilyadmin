@@ -89,6 +89,7 @@ export default function SiteEditor(props: {
   // Overlay shown over the preview while the AI is designing, with a rotating
   // status caption so it's obvious it's actively working (not frozen).
   const [designBusy, setDesignBusy] = useState(false);
+  const [busyLabel, setBusyLabel] = useState("Designing the world-class version of this site");
   const [designStep, setDesignStep] = useState(0);
   useEffect(() => {
     if (!designBusy) return;
@@ -148,6 +149,37 @@ export default function SiteEditor(props: {
     }
   }
 
+  async function fixA11y() {
+    setDesigning(true);
+    setBusyLabel("Fixing the accessibility issues");
+    setDesignBusy(true);
+    setDesignMsg(null);
+    try {
+      const res = await fetch(`/api/sites/${props.siteId}/fix`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageId: props.pageId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDesignMsg(typeof data.error === "string" ? data.error : "Fix failed");
+        return;
+      }
+      setDesignMsg(
+        `${data.summary}${data.dryRun ? " (mock mode)" : ""} — a11y ${data.report?.a11yScore ?? "—"}/100${
+          data.report?.ok ? ", passes checks ✓" : ", still needs work"
+        }`
+      );
+      if (data.report) setReport(data.report);
+      setPreviewKey((k) => k + 1);
+    } catch {
+      setDesignMsg("Fix failed — please try again.");
+    } finally {
+      setDesigning(false);
+      setDesignBusy(false);
+    }
+  }
+
   async function exportPage() {
     const ok = await save();
     if (ok) window.open(`/api/pages/${props.pageId}/export`, "_blank");
@@ -180,6 +212,7 @@ export default function SiteEditor(props: {
 
   async function generateDesign() {
     setDesigning(true);
+    setBusyLabel("Designing the world-class version of this site");
     setDesignBusy(true);
     setDesignMsg(null);
     setReport(null);
@@ -539,7 +572,7 @@ export default function SiteEditor(props: {
                   <div className="w-full max-w-sm rounded-2xl bg-white/95 p-6 text-center shadow-2xl">
                     <div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-[3px] border-brand-100 border-t-brand-500" />
                     <p className="text-sm font-semibold text-slate-900">
-                      ✨ Designing the world-class version of this site
+                      ✨ {busyLabel}
                     </p>
                     <p className="mt-1 h-5 text-sm text-slate-500 transition-all">
                       {DESIGN_STEPS[designStep]}
@@ -557,7 +590,14 @@ export default function SiteEditor(props: {
           );
         })()}
 
-        {report && <ValidationPanel report={report} />}
+        {report && (
+          <ValidationPanel
+            report={report}
+            canFix={customActive}
+            fixing={designing}
+            onFix={fixA11y}
+          />
+        )}
       </div>
     </div>
   );
@@ -583,7 +623,18 @@ function describeError(payload: unknown): string {
   return "Something went wrong saving.";
 }
 
-function ValidationPanel({ report }: { report: ValidationReport }) {
+function ValidationPanel({
+  report,
+  canFix,
+  fixing,
+  onFix,
+}: {
+  report: ValidationReport;
+  canFix: boolean;
+  fixing: boolean;
+  onFix: () => void;
+}) {
+  const hasIssues = !report.ok || report.violations.length > 0;
   return (
     <div className={`card space-y-2 ${report.ok ? "border-emerald-200" : "border-amber-300"}`}>
       <div className="flex items-center justify-between">
@@ -594,6 +645,17 @@ function ValidationPanel({ report }: { report: ValidationReport }) {
           a11y {report.a11yScore} · {(report.sizeBytes / 1024).toFixed(0)} KB
         </span>
       </div>
+
+      {hasIssues && canFix && (
+        <button onClick={onFix} disabled={fixing} className="btn w-full text-sm">
+          {fixing ? "Fixing…" : "✨ Fix accessibility with AI, then re-check"}
+        </button>
+      )}
+      {hasIssues && !canFix && (
+        <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          Generate a custom design (Design tab) to enable one-click AI fixes. Structured pages are compliant by construction.
+        </p>
+      )}
       {report.blockers.length > 0 && (
         <ul className="space-y-1 text-sm text-amber-700">
           {report.blockers.map((b, i) => (

@@ -171,6 +171,87 @@ export async function generateCustomSite(input: DesignInput): Promise<DesignResu
   return { html: last!.html, report: last!.report, summary: last!.summary, dryRun: false };
 }
 
+// One-click "make it compliant": takes the page's CURRENT html and fixes only
+// the accessibility issues, preserving the design/layout/copy/images. Same
+// validate+retry gate as generation, so the result is verified before saving.
+export async function fixCustomSite(input: DesignInput, currentHtml: string): Promise<DesignResult> {
+  const current = await validate(currentHtml, input);
+  if (current.ok) {
+    return { html: currentHtml, report: current, summary: "Already passes all checks — nothing to fix.", dryRun: false };
+  }
+  if (!isAiConfigured()) {
+    return {
+      html: currentHtml,
+      report: current,
+      summary: "Mock mode (no ANTHROPIC_API_KEY): can't auto-fix here — this works on the deployed app.",
+      dryRun: true,
+    };
+  }
+
+  const problemsOf = (r: ValidationReport) =>
+    [
+      ...r.blockers,
+      ...r.violations.slice(0, 10).map((v) => `${v.impact ?? "minor"}: ${v.help} (${v.nodeCount} element(s))`),
+    ].join("\n- ");
+
+  const client = new Anthropic();
+  const messages: Anthropic.MessageParam[] = [
+    {
+      role: "user",
+      content: `Below is the CURRENT HTML for this page. Fix ONLY the accessibility issues listed — preserve the visual design, layout, copy, images, and structure exactly as they are. Return the corrected full HTML document by calling write_site.
+
+ACCESSIBILITY ISSUES TO FIX:
+- ${problemsOf(current)}
+
+CURRENT HTML:
+${currentHtml}`,
+    },
+  ];
+
+  let last: { html: string; summary: string; report: ValidationReport } = {
+    html: currentHtml,
+    summary: "",
+    report: current,
+  };
+
+  for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
+    const stream = client.messages.stream({
+      model: MODEL,
+      max_tokens: 32000,
+      system: DESIGN_SYSTEM,
+      tools: [WRITE_SITE_TOOL],
+      tool_choice: { type: "tool", name: "write_site" },
+      messages,
+    });
+    const response = await stream.finalMessage();
+    const toolUse = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+    if (!toolUse) throw new Error("The fixer did not return a page.");
+
+    const raw = toolUse.input as { html?: unknown; summary?: unknown };
+    const html = typeof raw.html === "string" ? raw.html : "";
+    const summary = typeof raw.summary === "string" ? raw.summary : "Fixed the accessibility issues.";
+    const report = await validate(html, input);
+    last = { html, summary, report };
+
+    if (report.ok) return { html, report, summary, dryRun: false };
+
+    messages.push({ role: "assistant", content: response.content });
+    messages.push({
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: toolUse.id,
+          is_error: true,
+          content: `Still not passing. Fix ALL of these and call write_site again with the corrected full HTML — keep the design intact:\n- ${problemsOf(report)}`,
+        },
+      ],
+    });
+  }
+
+  return { html: last.html, report: last.report, summary: last.summary, dryRun: false };
+}
+
 // A real, compliant sample page for mock mode (no API key). Modern gradient
 // hero, semantic structure, labeled form, strong contrast — passes the gate.
 function mockDesign(b: BusinessData): string {

@@ -153,15 +153,36 @@ export async function scanHtmlContent(html: string): Promise<ScanSummary> {
 }
 
 /** Scan a client's site, persist the result, and sync a summary back into GHL. */
+// Normalize a scan target: repair a missing colon after the scheme
+// ("https//foo" -> "https://foo"), add https:// when absent, and reject
+// anything that isn't a real domain (e.g. a stray id token) so we surface a
+// clear message instead of a cryptic net::ERR_NAME_NOT_RESOLVED.
+export function normalizeScanUrl(raw: string | null | undefined): string | null {
+  let s = (raw ?? "").trim();
+  if (!s) return null;
+  s = s.replace(/^(https?)(:)?\/\//i, "$1://");
+  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
+  try {
+    const u = new URL(s);
+    if (!u.hostname.includes(".")) return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
 export async function scanClientAndPersist(client: Client) {
-  const url = client.siteUrl ?? (client.domain ? `https://${client.domain}` : null);
+  const url = normalizeScanUrl(client.siteUrl ?? client.domain);
   if (!url) {
+    const raw = client.siteUrl ?? client.domain;
     return prisma.accessibilityScan.create({
       data: {
         clientId: client.id,
         url: "",
         status: "FAILED",
-        errorMessage: "Client has no domain or siteUrl configured",
+        errorMessage: raw
+          ? `"${raw}" isn't a valid website URL — set a real domain (e.g. example.com) in Business details.`
+          : "Client has no domain or siteUrl configured — add one in Business details.",
         violations: "[]",
       },
     });
