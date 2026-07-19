@@ -72,6 +72,19 @@ model Prospect {
   @@index([score])
 }
 
+// Per-IP daily counter for the public free scan, so nobody can abuse our
+// scanner to audit their own book of sites. One row per (ip, UTC day).
+model ScanRateLimit {
+  id        String   @id @default(cuid())
+  ip        String
+  day       String // YYYY-MM-DD (UTC)
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ip, day])
+}
+
 // A shareable sales demo generated for a prospect: their real site's "before"
 // (screenshot + risk score + outcome-framed problems) next to an AI-built
 // "after" redesign. Served publicly (no login) at /demo/[token] and as a

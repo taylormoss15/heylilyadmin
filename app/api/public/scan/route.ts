@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { normalizeProspectUrl, scanProspect } from "@/lib/prospecting/scan";
+import { getClientIp, isScanAllowed, consumeScan, DAILY_SCAN_LIMIT } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -24,6 +25,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "That doesn't look like a valid website address." }, { status: 400 });
   }
 
+  // Daily per-IP cap so nobody can use our scanner to audit their own sites.
+  const ip = getClientIp(request);
+  const { allowed } = await isScanAllowed(ip);
+  if (!allowed) {
+    return NextResponse.json(
+      {
+        error: `You've reached the daily limit of ${DAILY_SCAN_LIMIT} free scans. Please try again tomorrow — or book a call and we'll scan the rest for you.`,
+      },
+      { status: 429 }
+    );
+  }
+
   const existing = await prisma.prospect.findUnique({ where: { url } });
 
   // Reuse a very recent scan (10 min) so a refresh/re-submit doesn't re-run
@@ -36,6 +49,8 @@ export async function POST(request: NextRequest) {
 
   let prospect = existing;
   if (!fresh) {
+    // Only a real (non-reused) scan consumes the daily quota.
+    await consumeScan(ip);
     let result;
     try {
       result = await scanProspect(url);
