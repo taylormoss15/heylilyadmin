@@ -37,6 +37,9 @@ export interface ProspectRow {
   professionalismNote: string | null;
   aeoScore: number | null;
   aeoChecks: AeoCheck[];
+  source: string;
+  leadEmail: string | null;
+  leadName: string | null;
 }
 
 type SortKey = "score" | "businessName" | "url" | "industry" | "estimatedRevenue" | "employees";
@@ -370,6 +373,11 @@ function FragmentRow({
           <button onClick={onToggle} className="text-left font-medium text-brand-600 hover:underline">
             {r.businessName || hostOf(r.url)}
           </button>
+          {r.source === "inbound" && (
+            <div className="mt-0.5 inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+              Inbound lead{r.leadEmail ? " ✓" : ""}
+            </div>
+          )}
         </td>
         <td className="px-4 py-3">
           <a href={r.url} target="_blank" rel="noreferrer" className="text-slate-600 hover:underline">
@@ -503,6 +511,12 @@ function DetailsPanel({
       </div>
 
       <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+        {r.source === "inbound" && r.leadEmail && (
+          <div className="rounded-md bg-emerald-50 px-2.5 py-2 text-xs text-emerald-800">
+            <span className="font-semibold">Inbound lead</span> — {r.leadName ? `${r.leadName}, ` : ""}
+            <a href={`mailto:${r.leadEmail}`} className="underline">{r.leadEmail}</a>
+          </div>
+        )}
         <div className="text-xs text-slate-500">
           {r.scanStatus === "COMPLETED" ? (
             <>
@@ -787,6 +801,9 @@ function toRow(p: {
   professionalismNote?: string | null;
   aeoScore?: number | null;
   aeoChecks?: string | null;
+  source?: string;
+  leadEmail?: string | null;
+  leadName?: string | null;
 }): ProspectRow {
   return {
     id: p.id,
@@ -813,6 +830,9 @@ function toRow(p: {
     professionalismNote: p.professionalismNote ?? null,
     aeoScore: p.aeoScore ?? null,
     aeoChecks: parseAeoChecksJson(p.aeoChecks),
+    source: p.source ?? "manual",
+    leadEmail: p.leadEmail ?? null,
+    leadName: p.leadName ?? null,
   };
 }
 

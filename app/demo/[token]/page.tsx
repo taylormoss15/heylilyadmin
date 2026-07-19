@@ -15,6 +15,11 @@ export default async function DemoPage({ params }: { params: { token: string } }
   const demo = await prisma.demo.findUnique({ where: { token: params.token } });
   if (!demo || demo.status !== "READY" || !demo.redesignHtml) notFound();
 
+  // Track engagement — how many times the prospect opened their redesign.
+  prisma.demo
+    .update({ where: { token: params.token }, data: { views: { increment: 1 }, lastViewedAt: new Date() } })
+    .catch(() => {});
+
   const ctaUrl = process.env.DEMO_CTA_URL || "https://heylily.ai";
 
   return (

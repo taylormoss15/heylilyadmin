@@ -59,6 +59,12 @@ model Prospect {
   convertedClientId String? // set when converted to a Client
   demoToken         String? // token of the latest generated demo, for quick linking
 
+  // Where this prospect came from + inbound lead capture (public free scan).
+  source         String    @default("manual") // manual | inbound
+  leadEmail      String?
+  leadName       String?
+  leadCapturedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -96,6 +102,11 @@ model Demo {
 
   status    String   @default("PENDING") // PENDING | READY | FAILED
   error     String?
+
+  // Engagement tracking — how many times the shared demo has been opened.
+  views        Int       @default(0)
+  lastViewedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

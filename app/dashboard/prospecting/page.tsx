@@ -71,6 +71,9 @@ export default async function ProspectingPage() {
     professionalismNote: p.professionalismNote,
     aeoScore: p.aeoScore,
     aeoChecks: parseAeoChecks(p.aeoChecks),
+    source: p.source,
+    leadEmail: p.leadEmail,
+    leadName: p.leadName,
   }));
 
   return <ProspectsClient initial={rows} prevalence={prevalence} totalScanned={scanned.length} />;

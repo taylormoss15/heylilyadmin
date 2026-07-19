@@ -13,6 +13,8 @@ const PUBLIC_PATH_PREFIXES = [
   "/api/assets", // locally-stored site images (R2 fallback), referenced by client sites
   "/widget", // client-embeddable badge script, served from /public/widget
   "/demo", // public prospect sales demos (before/after + scorecard), shared by link
+  "/scan", // public free-scan lead magnet
+  "/api/public", // public scan + lead-capture endpoints behind the lead magnet
   "/_next",
   "/favicon.ico",
 ];

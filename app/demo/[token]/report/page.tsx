@@ -170,10 +170,20 @@ export default async function ReportPage({ params }: { params: { token: string }
             </div>
           </div>
 
-          <p className="mt-3 text-sm text-slate-600">
-            Any compliance score below 100 carries real ADA/WCAG exposure — over 4,000 web-accessibility lawsuits
-            were filed in the U.S. last year, most against small businesses.
-          </p>
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-slate-700">
+            <p className="font-semibold text-red-700">The hard truth about a non-compliant site</p>
+            <p className="mt-1">
+              These ADA/accessibility lawsuits typically end in a{" "}
+              <strong>$25,000–$50,000 settlement</strong> — or a long, painful legal fight you&apos;ll lose,
+              because the site genuinely isn&apos;t compliant. Over 4,000 were filed in the U.S. last year, most
+              against small businesses.
+            </p>
+            <p className="mt-2">
+              It&apos;s unfair, and we hate that there are sharks who go after small businesses like this. That&apos;s
+              exactly why Hey Lily exists — to give you a genuinely high-quality, fully-compliant site at a price
+              that actually makes sense.
+            </p>
+          </div>
 
           {demo.beforeShot && (
             <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">

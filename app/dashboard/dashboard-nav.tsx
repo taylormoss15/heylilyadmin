@@ -18,6 +18,12 @@ const SECTIONS: { href: string; label: string; hint: string; match: (p: string) 
     hint: "Score & convert leads",
     match: (p) => p.startsWith("/dashboard/prospecting"),
   },
+  {
+    href: "/dashboard/demos",
+    label: "Demos",
+    hint: "Sent demos & opens",
+    match: (p) => p.startsWith("/dashboard/demos"),
+  },
 ];
 
 export default function DashboardNav() {
