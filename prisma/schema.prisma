@@ -84,6 +84,11 @@ model Demo {
   beforeShot      String? // data: URL (JPEG) screenshot of the original site
   issues          String? // JSON array of outcome-framed problem statements
 
+  // On-page / SEO snapshot of the current site (carried from the prospect scan)
+  seoScore   Int? // 0-100 on-page/AEO score
+  seoChecks  String? // JSON array of AEO checks (label, pass, detail)
+  platform   String? // detected site builder, if any
+
   // After (the AI redesign)
   redesignHtml String? // finalized, compliance-checked HTML of the new site
   afterScore   Float?

@@ -68,6 +68,11 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       beforeSerious: imported.scan.seriousCount,
       beforeShot: imported.screenshot ?? null,
       issues: JSON.stringify(issues),
+      // Carry the on-page/SEO snapshot from the prospect's scan (if any) so the
+      // scorecard can show the search-optimization gaps alongside compliance.
+      seoScore: prospect.aeoScore ?? null,
+      seoChecks: prospect.aeoChecks ?? null,
+      platform: prospect.platform ?? null,
       redesignHtml,
       afterScore,
       dryRun,
