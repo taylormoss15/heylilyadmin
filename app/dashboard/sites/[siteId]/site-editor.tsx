@@ -501,11 +501,23 @@ export default function SiteEditor(props: {
               {validating ? "Checking…" : "Validate"}
             </button>
             <button onClick={exportPage} className="btn-secondary text-sm">Export HTML</button>
-            <button onClick={publish} disabled={publishing} className="btn text-sm">
+            <button
+              onClick={publish}
+              disabled={publishing || !report?.ok}
+              title={report?.ok ? "" : "Publish unlocks after a 100%-clean validation"}
+              className="btn text-sm"
+            >
               {publishing ? "…" : "Publish"}
             </button>
           </div>
         </div>
+
+        {!report?.ok && !publishReady && (
+          <p className="text-xs text-slate-500">
+            🔒 Publish unlocks once the scan is <strong>100% clean</strong>.{" "}
+            {report ? "Fix the items below" : "Run Validate"} to enable it.
+          </p>
+        )}
 
         {publishError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{publishError}</p>}
         {publishDone && (
