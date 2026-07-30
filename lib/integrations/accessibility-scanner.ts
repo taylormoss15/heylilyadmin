@@ -27,6 +27,22 @@ async function notifyComplianceIssue(
 // against the client's live site. Results are stored per-scan so the
 // audit trail is a genuine dated history, not a static badge.
 
+export interface ViolationNode {
+  target: string; // CSS selector for the offending element
+  html: string; // a snippet of the element's markup
+  failureSummary: string;
+  // Present for color-contrast violations — the exact measured colors so a
+  // fix can target the precise element instead of guessing.
+  color?: {
+    fg: string;
+    bg: string;
+    ratio: number; // measured contrast ratio
+    required: string; // e.g. "4.5:1"
+    fontSize?: string;
+    fontWeight?: string;
+  };
+}
+
 export interface ScanSummary {
   violationCount: number;
   seriousCount: number;
@@ -40,6 +56,7 @@ export interface ScanSummary {
     help: string;
     helpUrl: string;
     nodeCount: number;
+    nodes: ViolationNode[];
   }>;
 }
 
@@ -91,6 +108,39 @@ export async function scanOpenPage(page: Page): Promise<ScanSummary> {
   return summarize(await runAxe(page));
 }
 
+// Pull the actionable detail off each axe node — the selector, a markup
+// snippet, and (for color-contrast) the measured colors and required ratio —
+// so an AI fix can target the exact element instead of guessing. Capped at a
+// few nodes per violation to keep the payload small.
+function extractNodes(nodes: unknown[]): ViolationNode[] {
+  return (nodes as Array<Record<string, unknown>>).slice(0, 4).map((n) => {
+    const target = Array.isArray(n.target) ? n.target.join(" ") : String(n.target ?? "");
+    const html = typeof n.html === "string" ? n.html.slice(0, 240) : "";
+    const failureSummary =
+      typeof n.failureSummary === "string" ? n.failureSummary.replace(/\s+/g, " ").trim().slice(0, 240) : "";
+
+    let color: ViolationNode["color"];
+    const checks = [
+      ...((n.any as Array<Record<string, unknown>>) ?? []),
+      ...((n.all as Array<Record<string, unknown>>) ?? []),
+      ...((n.none as Array<Record<string, unknown>>) ?? []),
+    ];
+    const cc = checks.find((c) => c && c.id === "color-contrast" && c.data);
+    if (cc && cc.data) {
+      const d = cc.data as Record<string, unknown>;
+      color = {
+        fg: String(d.fgColor ?? ""),
+        bg: String(d.bgColor ?? ""),
+        ratio: Number(d.contrastRatio ?? 0),
+        required: String(d.expectedContrastRatio ?? "4.5:1"),
+        fontSize: d.fontSize ? String(d.fontSize) : undefined,
+        fontWeight: d.fontWeight ? String(d.fontWeight) : undefined,
+      };
+    }
+    return { target, html, failureSummary, color };
+  });
+}
+
 function summarize(results: RawAxeResults): ScanSummary {
   const seriousCount = results.violations.filter(
     (v) => v.impact === "serious" || v.impact === "critical"
@@ -103,6 +153,7 @@ function summarize(results: RawAxeResults): ScanSummary {
     help: v.help,
     helpUrl: v.helpUrl,
     nodeCount: v.nodes.length,
+    nodes: extractNodes(v.nodes),
   }));
 
   return {

@@ -101,6 +101,30 @@ ${images}${booking}${direction}
 Design a stunning, high-converting home page for this business.`;
 }
 
+// Turn a validation report into a precise, actionable problem list for the
+// model — including, for color-contrast, the exact element selector and the
+// measured vs required contrast so it can fix the right element deterministically
+// instead of guessing.
+function describeProblems(report: ValidationReport): string {
+  const lines: string[] = [...report.blockers.filter((b) => !/must be fixed before publishing/i.test(b))];
+  for (const v of report.violations.slice(0, 8)) {
+    let line = `${v.impact ?? "minor"}: ${v.help}`;
+    for (const n of v.nodes.slice(0, 4)) {
+      if (n.color) {
+        line +=
+          `\n    → element \`${n.target}\`: text color ${n.color.fg} on background ${n.color.bg} measures ` +
+          `${n.color.ratio}:1 but must be at least ${n.color.required}` +
+          `${n.color.fontSize ? ` (font ${n.color.fontSize}px${n.color.fontWeight ? `, weight ${n.color.fontWeight}` : ""})` : ""}. ` +
+          `Adjust the text color (or its background) so the ratio meets the requirement — keep the brand feel, e.g. brighten/lighten a muted accent, or darken the background behind it.`;
+      } else if (n.target) {
+        line += `\n    → element \`${n.target}\`${n.failureSummary ? `: ${n.failureSummary}` : ""}`;
+      }
+    }
+    lines.push(line);
+  }
+  return lines.join("\n- ");
+}
+
 async function validate(rawHtml: string, input: DesignInput): Promise<ValidationReport> {
   const finalized = finalizeCustomHtml(rawHtml, {
     clientId: input.clientId,
@@ -150,10 +174,7 @@ export async function generateCustomSite(input: DesignInput): Promise<DesignResu
     }
 
     // Feed the specific failures back so the model fixes them and re-submits.
-    const problems = [
-      ...report.blockers,
-      ...report.violations.slice(0, 8).map((v) => `${v.impact ?? "minor"}: ${v.help} (${v.nodeCount} element(s))`),
-    ].join("\n- ");
+    const problems = describeProblems(report);
     messages.push({ role: "assistant", content: response.content });
     messages.push({
       role: "user",
@@ -190,11 +211,7 @@ export async function fixCustomSite(input: DesignInput, currentHtml: string): Pr
     };
   }
 
-  const problemsOf = (r: ValidationReport) =>
-    [
-      ...r.blockers,
-      ...r.violations.slice(0, 10).map((v) => `${v.impact ?? "minor"}: ${v.help} (${v.nodeCount} element(s))`),
-    ].join("\n- ");
+  const problemsOf = (r: ValidationReport) => describeProblems(r);
 
   const client = new Anthropic();
   const messages: Anthropic.MessageParam[] = [

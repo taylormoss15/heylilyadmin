@@ -1,4 +1,5 @@
 import { scanHtmlContent } from "@/lib/integrations/accessibility-scanner";
+import type { ViolationNode } from "@/lib/integrations/accessibility-scanner";
 import type { RenderResult } from "@/lib/site/renderer";
 
 // The publish gate. A generated page must pass these checks before it can
@@ -17,7 +18,13 @@ export interface ValidationReport {
   a11yOk: boolean;
   violationCount: number;
   seriousCount: number;
-  violations: Array<{ id: string; impact: string | null; help: string; nodeCount: number }>;
+  violations: Array<{
+    id: string;
+    impact: string | null;
+    help: string;
+    nodeCount: number;
+    nodes: ViolationNode[];
+  }>;
   warnings: string[];
   blockers: string[];
 }
@@ -59,6 +66,7 @@ export async function validateRender(render: RenderResult): Promise<ValidationRe
       impact: v.impact,
       help: v.help,
       nodeCount: v.nodeCount,
+      nodes: v.nodes,
     })),
     warnings: render.warnings,
     blockers,
