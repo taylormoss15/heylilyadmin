@@ -470,6 +470,14 @@ export default function SiteEditor(props: {
               ))}
             </div>
             </div>
+
+            {customActive && (
+              <ImageSwapPanel
+                siteId={props.siteId}
+                pageId={props.pageId}
+                onChanged={() => setPreviewKey((k) => k + 1)}
+              />
+            )}
           </div>
         )}
       </div>
@@ -715,6 +723,103 @@ function Area({ label, value, onChange }: { label: string; value: string; onChan
       <span className="mb-1 block font-medium text-slate-700">{label}</span>
       <textarea className="input" rows={3} value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
+  );
+}
+
+/**
+ * Replace an image in a custom AI design. Lists the photos currently used in
+ * the page; dropping a new file swaps it in place everywhere (a deterministic
+ * URL replace — the layout is untouched). Perfect for swapping a low-res photo
+ * for a higher-res one.
+ */
+function ImageSwapPanel({
+  siteId,
+  pageId,
+  onChanged,
+}: {
+  siteId: string;
+  pageId: string;
+  onChanged: () => void;
+}) {
+  const [images, setImages] = useState<string[] | null>(null);
+  const [busyUrl, setBusyUrl] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/pages/${pageId}/images`)
+      .then((r) => r.json())
+      .then((d) => active && setImages(Array.isArray(d.images) ? d.images : []))
+      .catch(() => active && setImages([]));
+    return () => {
+      active = false;
+    };
+  }, [pageId]);
+
+  async function replace(oldUrl: string, file: File) {
+    setBusyUrl(oldUrl);
+    setErr(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const up = await fetch(`/api/sites/${siteId}/assets`, { method: "POST", body });
+      if (!up.ok) {
+        const d = await up.json().catch(() => ({}));
+        setErr(typeof d.error === "string" ? d.error : "Upload failed");
+        return;
+      }
+      const { asset } = await up.json();
+      const res = await fetch(`/api/pages/${pageId}/images`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldUrl, newUrl: asset.cdnUrl }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(typeof d.error === "string" ? d.error : "Swap failed");
+        return;
+      }
+      setImages(Array.isArray(d.images) ? d.images : []);
+      onChanged();
+    } finally {
+      setBusyUrl(null);
+    }
+  }
+
+  return (
+    <div className="card space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-900">Replace an image</h3>
+        <p className="text-xs text-slate-500">
+          Drop in a new file — e.g. a higher-res photo — to swap it in place. The design and layout stay exactly the same.
+        </p>
+      </div>
+      {images === null ? (
+        <p className="text-xs text-slate-400">Loading images…</p>
+      ) : images.length === 0 ? (
+        <p className="text-xs text-slate-400">No images found in this design.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {images.map((u) => (
+            <div key={u} className="rounded-lg border border-slate-200 p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={u} alt="" className="mb-2 h-24 w-full rounded bg-slate-100 object-cover" />
+              <label className={`btn-secondary block cursor-pointer text-center text-xs ${busyUrl ? "pointer-events-none opacity-60" : ""}`}>
+                {busyUrl === u ? "Replacing…" : "Replace"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={busyUrl !== null}
+                  onChange={(e) => e.target.files?.[0] && replace(u, e.target.files[0])}
+                />
+              </label>
+            </div>
+          ))}
+        </div>
+      )}
+      {err && <p className="text-xs text-red-600">{err}</p>}
+    </div>
   );
 }
 
