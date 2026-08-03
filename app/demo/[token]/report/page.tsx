@@ -229,7 +229,7 @@ export default async function ReportPage({ params }: { params: { token: string }
           </div>
 
           <div className="no-print mt-4 overflow-hidden rounded-xl border border-slate-200">
-            <iframe title="Your redesign" srcDoc={demo.redesignHtml ?? ""} className="h-[520px] w-full border-0" />
+            <iframe title="Your redesign" src={`/demo/${demo.token}/site`} className="h-[520px] w-full border-0" />
           </div>
 
           <div className="mt-4 rounded-xl bg-slate-900 p-5 text-center text-white">

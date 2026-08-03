@@ -27,7 +27,7 @@ export default async function DemoPage({ params }: { params: { token: string } }
       businessName={demo.businessName || "Your business"}
       sourceUrl={demo.sourceUrl}
       beforeShot={demo.beforeShot}
-      redesignHtml={demo.redesignHtml}
+      siteSrc={`/demo/${demo.token}/site`}
       beforeScore={demo.beforeScore}
       afterScore={demo.afterScore}
       reportUrl={`/demo/${demo.token}/report`}

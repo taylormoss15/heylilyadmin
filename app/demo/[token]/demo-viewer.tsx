@@ -9,7 +9,7 @@ export default function DemoViewer({
   businessName,
   sourceUrl,
   beforeShot,
-  redesignHtml,
+  siteSrc,
   beforeScore,
   afterScore,
   reportUrl,
@@ -18,7 +18,7 @@ export default function DemoViewer({
   businessName: string;
   sourceUrl: string;
   beforeShot: string | null;
-  redesignHtml: string;
+  siteSrc: string;
   beforeScore: number | null;
   afterScore: number | null;
   reportUrl: string;
@@ -60,7 +60,7 @@ export default function DemoViewer({
 
       <div className="relative min-h-0 flex-1 bg-slate-100">
         {view === "after" ? (
-          <iframe title={`${businessName} — redesign`} srcDoc={redesignHtml} className="h-full w-full border-0" />
+          <iframe title={`${businessName} — redesign`} src={siteSrc} className="h-full w-full border-0" />
         ) : (
           <div className="h-full w-full overflow-y-auto bg-slate-200">
             {beforeShot ? (
