@@ -16,7 +16,8 @@ export default async function ClientOverviewPage({ params }: { params: { id: str
       uptimeIncidents: { orderBy: { startedAt: "desc" }, take: 20 },
       uptimeMonitor: true,
       ghlSyncLogs: { orderBy: { createdAt: "desc" }, take: 1 },
-      _count: { select: { emailSeats: true, sites: true, accessibilityScans: true } },
+      formSubmissions: { orderBy: { createdAt: "desc" }, take: 5 },
+      _count: { select: { emailSeats: true, sites: true, accessibilityScans: true, formSubmissions: true } },
     },
   });
 
@@ -106,6 +107,45 @@ export default async function ClientOverviewPage({ params }: { params: { id: str
             <div className="mt-1 truncate text-xs text-slate-400">{c.hint}</div>
           </Link>
         ))}
+      </div>
+
+      <div className="card space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-xs uppercase tracking-wide text-slate-500">
+            Website enquiries ({client._count.formSubmissions})
+          </div>
+          {!client.notificationEmail && (
+            <Link href={`${base}/business`} className="text-xs text-amber-600 hover:underline">
+              Set a notification email →
+            </Link>
+          )}
+        </div>
+        {client.formSubmissions.length === 0 ? (
+          <p className="text-sm text-slate-400">
+            No contact-form entries yet.{" "}
+            {client.notificationEmail
+              ? `They're emailed to ${client.notificationEmail}.`
+              : "Add a notification email in Business details so entries get emailed."}
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-100 text-sm">
+            {client.formSubmissions.map((s) => (
+              <li key={s.id} className="py-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-slate-800">{s.name || s.email || s.phone || "Enquiry"}</span>
+                  <span className="text-xs text-slate-400">
+                    {new Date(s.createdAt).toLocaleString()}
+                    {s.emailed ? " · emailed" : " · stored"}
+                  </span>
+                </div>
+                {s.message && <p className="mt-0.5 line-clamp-2 text-slate-600">{s.message}</p>}
+                <div className="mt-0.5 text-xs text-slate-400">
+                  {[s.email, s.phone].filter(Boolean).join(" · ")}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="card flex items-center justify-between">

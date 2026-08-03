@@ -30,6 +30,7 @@ export default async function ClientBusinessPage({ params }: { params: { id: str
           domainRegistrar: client.domainRegistrar ?? "",
           dnsProvider: client.dnsProvider ?? "",
           internalNotes: client.internalNotes ?? "",
+          notificationEmail: client.notificationEmail ?? "",
           hasTrackers: client.hasTrackers,
         }}
       />

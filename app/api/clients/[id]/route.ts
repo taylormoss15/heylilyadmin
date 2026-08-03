@@ -15,6 +15,7 @@ const updateClientSchema = z.object({
   domainRegistrar: z.string().max(120).nullable().optional(),
   dnsProvider: z.string().max(120).nullable().optional(),
   internalNotes: z.string().max(5000).nullable().optional(),
+  notificationEmail: z.string().email().nullable().optional(),
 });
 
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {

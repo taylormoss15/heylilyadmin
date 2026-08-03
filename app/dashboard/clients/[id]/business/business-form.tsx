@@ -12,6 +12,7 @@ interface Values {
   domainRegistrar: string;
   dnsProvider: string;
   internalNotes: string;
+  notificationEmail: string;
   hasTrackers: boolean;
 }
 
@@ -43,6 +44,7 @@ export default function BusinessForm({ clientId, initial }: { clientId: string; 
       domainRegistrar: values.domainRegistrar.trim() || null,
       dnsProvider: values.dnsProvider.trim() || null,
       internalNotes: values.internalNotes.trim() || null,
+      notificationEmail: values.notificationEmail.trim() || null,
       hasTrackers: values.hasTrackers,
     };
     const res = await fetch(`/api/clients/${clientId}`, {
@@ -82,6 +84,11 @@ export default function BusinessForm({ clientId, initial }: { clientId: string; 
           <div>
             <label className={label} htmlFor="bf-ghl">GHL location ID</label>
             <input id="bf-ghl" className={field} value={values.ghlLocationId} onChange={(e) => set("ghlLocationId", e.target.value)} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={label} htmlFor="bf-notify">Contact-form notification email</label>
+            <input id="bf-notify" type="email" className={field} placeholder="owner@business.com" value={values.notificationEmail} onChange={(e) => set("notificationEmail", e.target.value)} />
+            <p className="mt-1 text-xs text-slate-400">Where their website&apos;s contact-form entries are emailed.</p>
           </div>
         </div>
       </section>

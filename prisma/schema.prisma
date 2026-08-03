@@ -143,6 +143,7 @@ model Client {
   domainRegistrar String? // where the domain was bought (GoDaddy, Namecheap…)
   dnsProvider     String? // where DNS is managed (Cloudflare, registrar…)
   internalNotes   String? // free-form ops/troubleshooting notes
+  notificationEmail String? // where the site's contact-form entries are emailed
 
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
@@ -154,9 +155,29 @@ model Client {
   emailSeats         EmailSeat[]
   ghlSyncLogs        GhlSyncLog[]
   sites              Site[]
+  formSubmissions    FormSubmission[]
 
   @@index([status])
   @@index([tier])
+}
+
+// A contact-form entry from a live client site, relayed by the injected
+// contact-forms widget to /api/forms/[clientId], emailed to the client and
+// kept here so entries are never lost even if email delivery hiccups.
+model FormSubmission {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name      String?
+  email     String?
+  phone     String?
+  message   String?
+  fields    String? // JSON of every submitted field
+  sourceUrl String?
+  emailed   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([clientId, createdAt])
 }
 
 model AccessibilityScan {

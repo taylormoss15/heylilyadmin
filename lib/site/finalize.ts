@@ -1,4 +1,4 @@
-import { complianceBadge, cookieBanner, localBusinessJsonLd } from "@/lib/site/renderer";
+import { complianceBadge, contactFormWidget, cookieBanner, localBusinessJsonLd } from "@/lib/site/renderer";
 import type { BusinessData } from "@/lib/site/ir";
 
 // Takes the AI's bespoke HTML and guarantees the compliance layer is present
@@ -44,6 +44,11 @@ export function finalizeCustomHtml(rawHtml: string, opts: FinalizeOptions): stri
   // Accessibility badge — always, unless suppressed or already present.
   if (opts.showBadge !== false && !/id="heylily-a11y-badge"|widget\/accessibility-badge\.js/.test(html)) {
     footerBits.push(complianceBadge(opts.clientId, adminBaseUrl));
+  }
+  // Contact-form relay — only if the page actually has a form and isn't a demo
+  // (demos suppress the badge/relay). Wires the form to email entries.
+  if (opts.showBadge !== false && /<form\b/i.test(html) && !/widget\/contact-forms\.js/.test(html)) {
+    footerBits.push(contactFormWidget(opts.clientId, adminBaseUrl));
   }
 
   if (footerBits.length) {

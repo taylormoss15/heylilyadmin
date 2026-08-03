@@ -303,6 +303,17 @@ export function complianceBadge(clientId: string, adminBaseUrl: string): string 
 <script src="${esc(base)}/widget/accessibility-badge.js" defer></script>`;
 }
 
+// The contact-form relay widget. Sets the same client config the badge uses
+// (harmless if already set) and loads the script that wires up the page's
+// contact form to email entries to the business.
+export function contactFormWidget(clientId: string, adminBaseUrl: string): string {
+  const base = adminBaseUrl.replace(/\/$/, "");
+  return `<script>window.HEYLILY_CLIENT_ID=window.HEYLILY_CLIENT_ID||${JSON.stringify(
+    clientId
+  )};window.HEYLILY_API_BASE=window.HEYLILY_API_BASE||${JSON.stringify(base)};</script>
+<script src="${esc(base)}/widget/contact-forms.js" defer></script>`;
+}
+
 export function cookieBanner(): string {
   return `<div class="cookie" id="heylily-cookie" role="region" aria-label="Cookie consent" style="position:fixed;left:0;right:0;bottom:0;z-index:2147483000;background:#1b2430;color:#fff;padding:14px 20px;display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;font:14px system-ui,sans-serif">
 <span>We use cookies to improve your experience.</span>
@@ -441,6 +452,7 @@ ${body}
 </footer>
 ${options.showCookieBanner ? cookieBanner() : ""}
 ${complianceBadge(options.clientId, adminBaseUrl)}
+${/<form\b/i.test(body) ? contactFormWidget(options.clientId, adminBaseUrl) : ""}
 </body>
 </html>`;
 
