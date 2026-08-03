@@ -49,6 +49,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                 score: prospect.score,
                 violations: prospect.violations ?? "[]",
                 status: "COMPLETED",
+                kind: "baseline", // the old site's "before" — kept off the live badge
               },
             }
           : undefined,

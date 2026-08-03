@@ -30,7 +30,10 @@ export async function GET(_request: NextRequest, { params }: { params: { clientI
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const scans = await prisma.accessibilityScan.findMany({
-    where: { clientId: client.id, scannedAt: { gte: thirtyDaysAgo } },
+    // Only ongoing audits of the LIVE site — never the pre-launch "baseline"
+    // scan of the client's old site. The public badge reflects the site it's
+    // actually on, so past issues from the old site never appear here.
+    where: { clientId: client.id, kind: "monitor", scannedAt: { gte: thirtyDaysAgo } },
     orderBy: { scannedAt: "desc" },
     select: {
       scannedAt: true,

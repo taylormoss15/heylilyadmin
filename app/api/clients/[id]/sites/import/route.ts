@@ -63,6 +63,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       score: imported.scan.score,
       violations: JSON.stringify(imported.scan.violations),
       status: "COMPLETED",
+      kind: "baseline", // the old site's "before" — never shown on the live badge
     },
   });
 
