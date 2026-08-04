@@ -174,10 +174,12 @@ model FormSubmission {
   message   String?
   fields    String? // JSON of every submitted field
   sourceUrl String?
+  ip        String? // submitter IP, for rate-limiting / abuse review
   emailed   Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@index([clientId, createdAt])
+  @@index([ip, createdAt])
 }
 
 model AccessibilityScan {

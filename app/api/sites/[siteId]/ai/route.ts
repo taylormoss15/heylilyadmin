@@ -3,8 +3,11 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { parseBusinessData, parsePageIR, parseTheme } from "@/lib/site/ir";
 import { runAiEdit } from "@/lib/site/ai-editor";
+import { editCustomSite } from "@/lib/site/ai-designer";
 import { renderPageRecord } from "@/lib/site/render-record";
 import { getSessionFromCookies } from "@/lib/auth";
+
+export const maxDuration = 300;
 
 const bodySchema = z.object({
   pageId: z.string().min(1),
@@ -28,6 +31,41 @@ export async function POST(request: NextRequest, { params }: { params: { siteId:
     where: { id: parsed.data.pageId, siteId: site.id },
   });
   if (!page) return NextResponse.json({ error: "Page not found" }, { status: 404 });
+
+  // When a custom AI design is active, "Describe a change" edits the actual
+  // custom HTML (not the structured fallback), so what you see is what changes.
+  if (page.customHtml) {
+    let edit;
+    try {
+      edit = await editCustomSite(
+        {
+          business: parseBusinessData(site.businessData),
+          ir: parsePageIR(page.ir),
+          clientId: site.clientId,
+          showCookieBanner: site.showCookieBanner,
+        },
+        page.customHtml,
+        parsed.data.instruction
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "AI edit failed";
+      return NextResponse.json({ error: message }, { status: 502 });
+    }
+
+    const updated = await prisma.page.update({ where: { id: page.id }, data: { customHtml: edit.html } });
+    const session = await getSessionFromCookies();
+    const render = renderPageRecord(updated, site);
+    await prisma.pageVersion.create({
+      data: { pageId: page.id, ir: updated.ir, html: render.html, createdBy: `${session?.userId ?? "system"} (ai-edit)` },
+    });
+
+    return NextResponse.json({
+      custom: true,
+      summary: edit.summary,
+      dryRun: edit.dryRun,
+      report: edit.report,
+    });
+  }
 
   let result;
   try {

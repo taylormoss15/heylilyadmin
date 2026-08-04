@@ -54,6 +54,10 @@ CONVERSION — every page drives ONE clear primary action:
 - Action-oriented button copy: "Call now", "Get a free quote", "Book online", "Pay your bill".
 - Wire CTAs to take action: tel:+15551234567, mailto:name@business.com, or #contact. Use the business's REAL phone/email from the data provided.
 
+RESPONSIVE — must look right on a phone, not just desktop:
+- Every section's text and content sits inside a container with comfortable horizontal padding (at least 20px, ideally clamp()-based) so NO text, heading, button, or list ever touches the screen edge on mobile. Full-bleed background colors/images are fine, but their inner content stays padded.
+- Use responsive type (clamp()), fluid spacing, and stacked layouts under ~640px. Test mentally at 375px wide: nothing overflows or hugs the edge.
+
 COMPLIANCE — this is validated automatically, so it is non-negotiable:
 - Semantic HTML5 with landmarks (header, nav, main, footer) and exactly ONE <h1>; logical heading order.
 - Every <img> has descriptive alt text. Every form control has an associated <label> (or aria-label).
@@ -191,6 +195,78 @@ export async function generateCustomSite(input: DesignInput): Promise<DesignResu
 
   // Return the best attempt even if it still has issues — the caller surfaces
   // the report, and the publish gate will still block a non-compliant page.
+  return { html: last!.html, report: last!.report, summary: last!.summary, dryRun: false };
+}
+
+// General "describe a change" edit for a custom-HTML page: applies the
+// operator's instruction to the CURRENT html while preserving everything else,
+// then runs the same compliance gate + retry loop as generation.
+export async function editCustomSite(
+  input: DesignInput,
+  currentHtml: string,
+  instruction: string
+): Promise<DesignResult> {
+  if (!isAiConfigured()) {
+    const report = await validate(currentHtml, input);
+    return {
+      html: currentHtml,
+      report,
+      summary: "Mock mode (no ANTHROPIC_API_KEY): edits work on the deployed app.",
+      dryRun: true,
+    };
+  }
+
+  const client = new Anthropic();
+  const messages: Anthropic.MessageParam[] = [
+    {
+      role: "user",
+      content: `Here is the CURRENT HTML for this page. Apply this change and return the complete updated HTML via write_site:
+
+CHANGE REQUESTED: ${instruction}
+
+Rules: make ONLY what the change asks for; preserve all other design, layout, copy, images, and structure; keep it fully accessible and responsive. Return the entire HTML document.
+
+CURRENT HTML:
+${currentHtml}`,
+    },
+  ];
+
+  let last: { html: string; summary: string; report: ValidationReport } | null = null;
+  for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
+    const stream = client.messages.stream({
+      model: MODEL,
+      max_tokens: 32000,
+      system: DESIGN_SYSTEM,
+      tools: [WRITE_SITE_TOOL],
+      tool_choice: { type: "tool", name: "write_site" },
+      messages,
+    });
+    const response = await stream.finalMessage();
+    const toolUse = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+    if (!toolUse) throw new Error("The editor did not return a page.");
+
+    const raw = toolUse.input as { html?: unknown; summary?: unknown };
+    const html = typeof raw.html === "string" ? raw.html : "";
+    const summary = typeof raw.summary === "string" ? raw.summary : "Applied your change.";
+    const report = await validate(html, input);
+    last = { html, summary, report };
+
+    if (report.ok) return { html, report, summary, dryRun: false };
+
+    messages.push({ role: "assistant", content: response.content });
+    messages.push({
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: toolUse.id,
+          is_error: true,
+          content: `The edit didn't pass the accessibility checks. Fix these and call write_site again with the corrected full HTML — keep your change:\n- ${describeProblems(report)}`,
+        },
+      ],
+    });
+  }
+
   return { html: last!.html, report: last!.report, summary: last!.summary, dryRun: false };
 }
 

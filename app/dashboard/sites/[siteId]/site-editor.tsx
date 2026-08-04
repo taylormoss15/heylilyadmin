@@ -203,8 +203,13 @@ export default function SiteEditor(props: {
     }
     const data = await res.json();
     // The route already persisted the change; sync local state + preview.
-    setSections(data.ir.sections);
-    if (data.theme) setTheme(data.theme);
+    if (data.custom) {
+      // Custom-HTML edit: nothing structured to sync, just refresh the preview.
+      if (data.report) setReport(data.report);
+    } else {
+      setSections(data.ir.sections);
+      if (data.theme) setTheme(data.theme);
+    }
     setAiSummary(data.summary);
     setAiInstruction("");
     setPreviewKey((k) => k + 1);

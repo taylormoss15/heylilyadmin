@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/integrations/email";
+import { getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
+
+// Spam guards (layered, no user friction, no per-site config):
+const MIN_FILL_MS = 2500; // submitted faster than this = a bot
+const MAX_PER_IP_PER_HOUR = 8;
 
 // Cross-origin: this is POSTed to by the contact form on client sites (any
 // domain), relayed by the injected contact-forms widget.
@@ -37,9 +42,29 @@ export async function POST(request: NextRequest, { params }: { params: { clientI
     return NextResponse.json({ ok: true }, { headers: CORS_HEADERS });
   }
 
+  // Time trap — a form filled out in under ~2.5s is a bot. Silently drop.
+  const elapsed = typeof body._elapsed === "number" ? body._elapsed : Number(body._elapsed);
+  if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed < MIN_FILL_MS) {
+    return NextResponse.json({ ok: true }, { headers: CORS_HEADERS });
+  }
+
   const client = await prisma.client.findUnique({ where: { id: params.clientId } });
   if (!client) {
     return NextResponse.json({ error: "Unknown site" }, { status: 404, headers: CORS_HEADERS });
+  }
+
+  // Per-IP rate limit across all client sites.
+  const ip = getClientIp(request);
+  if (ip && ip !== "unknown") {
+    const recent = await prisma.formSubmission.count({
+      where: { ip, createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
+    });
+    if (recent >= MAX_PER_IP_PER_HOUR) {
+      return NextResponse.json(
+        { error: "Too many submissions — please try again later." },
+        { status: 429, headers: CORS_HEADERS }
+      );
+    }
   }
 
   const name = str(body.name, 200);
@@ -55,7 +80,7 @@ export async function POST(request: NextRequest, { params }: { params: { clientI
   // Keep the full field set (minus honeypots) for the record.
   const fields: Record<string, string> = {};
   for (const [k, v] of Object.entries(body)) {
-    if (k === "_hp" || k === "website_hp") continue;
+    if (k === "_hp" || k === "website_hp" || k === "_elapsed") continue;
     const s = str(v);
     if (s) fields[k.slice(0, 60)] = s;
   }
@@ -63,7 +88,16 @@ export async function POST(request: NextRequest, { params }: { params: { clientI
   const sourceUrl = request.headers.get("referer") || request.headers.get("origin") || null;
 
   const submission = await prisma.formSubmission.create({
-    data: { clientId: client.id, name, email, phone, message, fields: JSON.stringify(fields), sourceUrl },
+    data: {
+      clientId: client.id,
+      name,
+      email,
+      phone,
+      message,
+      fields: JSON.stringify(fields),
+      sourceUrl,
+      ip: ip && ip !== "unknown" ? ip : null,
+    },
   });
 
   // Email the client (best-effort — the submission is already saved).

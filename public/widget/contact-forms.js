@@ -33,6 +33,10 @@
       hp.style.cssText = "position:absolute!important;left:-9999px!important;width:1px;height:1px;opacity:0";
       form.appendChild(hp);
 
+      // Record when the form loaded — real people take a few seconds to fill it
+      // out; instant submits are bots (checked server-side via _elapsed).
+      var loadedAt = Date.now();
+
       form.addEventListener("submit", function (e) {
         e.preventDefault();
 
@@ -41,6 +45,7 @@
         fd.forEach(function (value, key) {
           if (typeof value === "string") data[key] = value;
         });
+        data._elapsed = Date.now() - loadedAt;
 
         var btn = form.querySelector('button[type="submit"], input[type="submit"], button');
         var originalText = btn ? btn.textContent : null;
