@@ -215,6 +215,8 @@ function toBusinessData(c: ImportedContent): BusinessData {
     hours: [],
     services: c.services.map((name) => ({ name })),
     social: c.social,
+    serviceAreas: [],
+    faqs: [],
   };
 }
 

@@ -53,8 +53,28 @@ export async function POST(request: NextRequest, { params }: { params: { siteId:
     data: { customHtml: result.html },
   });
 
+  // Persist the AEO metadata the designer produced onto the site's business
+  // data, so the injected structured data (typed schema + FAQPage) matches the
+  // page. Only overwrite fields the AI actually returned.
+  let renderSite = site;
+  if (result.meta) {
+    const business = parseBusinessData(site.businessData);
+    const m = result.meta;
+    const merged = {
+      ...business,
+      ...(m.businessType ? { businessType: m.businessType } : {}),
+      ...(m.serviceAreas && m.serviceAreas.length ? { serviceAreas: m.serviceAreas } : {}),
+      ...(m.faqs && m.faqs.length ? { faqs: m.faqs } : {}),
+      ...(m.seoTitle ? { seoTitle: m.seoTitle } : {}),
+      ...(m.seoDescription ? { seoDescription: m.seoDescription } : {}),
+    };
+    const businessData = JSON.stringify(merged);
+    await prisma.site.update({ where: { id: site.id }, data: { businessData } });
+    renderSite = { ...site, businessData };
+  }
+
   const session = await getSessionFromCookies();
-  const render = renderPageRecord(updatedPage, site);
+  const render = renderPageRecord(updatedPage, renderSite);
   await prisma.pageVersion.create({
     data: { pageId: page.id, ir: updatedPage.ir, html: render.html, createdBy: `${session?.userId ?? "system"} (ai-design)` },
   });

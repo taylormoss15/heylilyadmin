@@ -1,5 +1,9 @@
-import { complianceBadge, contactFormWidget, cookieBanner, localBusinessJsonLd } from "@/lib/site/renderer";
+import { complianceBadge, contactFormWidget, cookieBanner, faqPageJsonLd, localBusinessJsonLd } from "@/lib/site/renderer";
 import type { BusinessData } from "@/lib/site/ir";
+
+function escAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 // Takes the AI's bespoke HTML and guarantees the compliance layer is present
 // no matter what the model produced: a valid <html lang>, LocalBusiness
@@ -30,10 +34,27 @@ export function finalizeCustomHtml(rawHtml: string, opts: FinalizeOptions): stri
     html = html.replace(/<!DOCTYPE html>/i, '<!DOCTYPE html>\n<html lang="en">') + "\n</html>";
   }
 
-  // LocalBusiness JSON-LD (AEO baseline) — only if the page has no ld+json.
+  // ---- AEO head: rich structured data + meta description + Open Graph ----
+  const headBits: string[] = [];
   if (!/application\/ld\+json/i.test(html)) {
-    const ld = localBusinessJsonLd(opts.business);
-    html = insertBefore(html, /<\/head>/i, ld) ?? html.replace(/<body\b[^>]*>/i, (m) => `${m}\n${ld}`);
+    headBits.push(localBusinessJsonLd(opts.business));
+    const faq = faqPageJsonLd(opts.business.faqs);
+    if (faq) headBits.push(faq);
+  }
+  const desc = opts.business.seoDescription || opts.business.tagline;
+  if (desc && !/<meta\s+name=["']description["']/i.test(html)) {
+    headBits.push(`<meta name="description" content="${escAttr(desc)}">`);
+  }
+  if (!/property=["']og:title["']/i.test(html)) {
+    const ogTitle = opts.business.seoTitle || opts.business.name;
+    headBits.push(`<meta property="og:title" content="${escAttr(ogTitle)}">`);
+    headBits.push(`<meta property="og:type" content="website">`);
+    if (desc) headBits.push(`<meta property="og:description" content="${escAttr(desc)}">`);
+    headBits.push(`<meta name="twitter:card" content="summary_large_image">`);
+  }
+  if (headBits.length) {
+    const block = headBits.join("\n");
+    html = insertBefore(html, /<\/head>/i, block) ?? html.replace(/<body\b[^>]*>/i, (m) => `${m}\n${block}`);
   }
 
   // Cookie banner (optional) — only if not already present.

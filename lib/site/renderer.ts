@@ -236,49 +236,20 @@ function paragraphs(text: string): string {
 // ---- JSON-LD ----
 
 function jsonLd(business: BusinessData, ir: PageIR): string {
-  const localBusiness: Record<string, unknown> = {
-    "@context": "https://schema.org",
-    "@type": "LocalBusiness",
-    name: business.name,
-  };
-  if (business.tagline) localBusiness.description = business.tagline;
-  if (business.phone) localBusiness.telephone = business.phone;
-  if (business.email) localBusiness.email = business.email;
-  if (business.priceRange) localBusiness.priceRange = business.priceRange;
-  if (business.address) {
-    localBusiness.address = {
-      "@type": "PostalAddress",
-      streetAddress: business.address.street,
-      addressLocality: business.address.city,
-      addressRegion: business.address.region,
-      postalCode: business.address.postal,
-      addressCountry: business.address.country,
-    };
+  const parts = [localBusinessJsonLd(business)];
+
+  // FAQPage: prefer explicit business.faqs, else pull from an faq section.
+  let faqs = business.faqs;
+  if (!faqs.length) {
+    const faqSection = ir.sections.find((s) => s.type === "faq");
+    if (faqSection && faqSection.type === "faq") {
+      faqs = faqSection.items.map((i) => ({ question: i.question, answer: i.answer }));
+    }
   }
+  const faqLd = faqPageJsonLd(faqs);
+  if (faqLd) parts.push(faqLd);
 
-  const blocks = [localBusiness];
-
-  const faq = ir.sections.find((s) => s.type === "faq");
-  if (faq && faq.type === "faq") {
-    blocks.push({
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      mainEntity: faq.items.map((item) => ({
-        "@type": "Question",
-        name: item.question,
-        acceptedAnswer: { "@type": "Answer", text: item.answer },
-      })),
-    } as never);
-  }
-
-  // JSON.stringify output is embedded in a <script type="application/ld+json">;
-  // escape "<" to prevent a "</script>" in any field from closing the tag.
-  return blocks
-    .map(
-      (b) =>
-        `<script type="application/ld+json">${JSON.stringify(b).replace(/</g, "\\u003c")}</script>`
-    )
-    .join("\n");
+  return parts.join("\n");
 }
 
 // ---- Nav ----
@@ -321,14 +292,25 @@ export function cookieBanner(): string {
 </div>`;
 }
 
-/** LocalBusiness JSON-LD from business data — used to guarantee the AEO baseline on custom HTML pages. */
+function ldScript(block: Record<string, unknown>): string {
+  return `<script type="application/ld+json">${JSON.stringify(block).replace(/</g, "\\u003c")}</script>`;
+}
+
+/**
+ * Rich business structured data — the AEO baseline injected on every custom
+ * page. Uses the AI-identified schema.org @type (e.g. Attorney, Dentist,
+ * RoofingContractor), the areas served, services, hours, and social profiles,
+ * so answer engines and search can read the business as a real entity.
+ */
 export function localBusinessJsonLd(business: BusinessData): string {
   const block: Record<string, unknown> = {
     "@context": "https://schema.org",
-    "@type": "LocalBusiness",
+    "@type": business.businessType || "LocalBusiness",
     name: business.name,
   };
-  if (business.tagline) block.description = business.tagline;
+  if (business.seoDescription || business.tagline || business.about) {
+    block.description = business.seoDescription || business.tagline || business.about;
+  }
   if (business.phone) block.telephone = business.phone;
   if (business.email) block.email = business.email;
   if (business.priceRange) block.priceRange = business.priceRange;
@@ -339,10 +321,38 @@ export function localBusinessJsonLd(business: BusinessData): string {
       addressLocality: business.address.city,
       addressRegion: business.address.region,
       postalCode: business.address.postal,
-      addressCountry: business.address.country,
+      addressCountry: business.address.country || "US",
     };
   }
-  return `<script type="application/ld+json">${JSON.stringify(block).replace(/</g, "\\u003c")}</script>`;
+  if (business.serviceAreas.length) {
+    block.areaServed = business.serviceAreas.map((a) => ({ "@type": "City", name: a }));
+  }
+  if (business.services.length) {
+    block.makesOffer = business.services.map((s) => ({
+      "@type": "Offer",
+      itemOffered: { "@type": "Service", name: s.name, ...(s.description ? { description: s.description } : {}) },
+    }));
+  }
+  const sameAs = business.social.map((s) => s.href).filter((h) => /^https?:\/\//i.test(h));
+  if (sameAs.length) block.sameAs = sameAs;
+  if (business.hours.length) {
+    block.openingHours = business.hours.map((h) => `${h.label} ${h.value}`.trim());
+  }
+  return ldScript(block);
+}
+
+/** FAQPage JSON-LD — high-value for answer engines (they lift Q&A directly). */
+export function faqPageJsonLd(faqs: { question: string; answer: string }[]): string {
+  if (!faqs.length) return "";
+  return ldScript({
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.map((f) => ({
+      "@type": "Question",
+      name: f.question,
+      acceptedAnswer: { "@type": "Answer", text: f.answer },
+    })),
+  });
 }
 
 // ---- Top-level render ----

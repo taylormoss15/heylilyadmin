@@ -20,11 +20,41 @@ export function isAiConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
+export interface DesignMeta {
+  seoTitle?: string;
+  seoDescription?: string;
+  businessType?: string;
+  serviceAreas?: string[];
+  faqs?: { question: string; answer: string }[];
+}
+
 export interface DesignResult {
   html: string; // the AI's raw HTML (compliance is injected at render time)
   report: ValidationReport;
   summary: string;
   dryRun: boolean;
+  meta?: DesignMeta; // AEO metadata the AI returned, for structured data
+}
+
+// Parse the AEO metadata off a write_site tool call, defensively.
+function parseMeta(raw: Record<string, unknown>): DesignMeta {
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  const meta: DesignMeta = {
+    seoTitle: str(raw.metaTitle),
+    seoDescription: str(raw.metaDescription),
+    businessType: str(raw.businessType),
+  };
+  if (Array.isArray(raw.serviceAreas)) {
+    meta.serviceAreas = raw.serviceAreas.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+  }
+  if (Array.isArray(raw.faqs)) {
+    meta.faqs = raw.faqs
+      .filter((f): f is { question: string; answer: string } =>
+        Boolean(f && typeof f === "object" && typeof (f as Record<string, unknown>).question === "string" && typeof (f as Record<string, unknown>).answer === "string")
+      )
+      .map((f) => ({ question: f.question.trim(), answer: f.answer.trim() }));
+  }
+  return meta;
 }
 
 export interface DesignInput {
@@ -68,18 +98,55 @@ IMAGES — use the real image URLs provided to you (from the business's own site
 
 BOOKING — if a booking URL is provided, the primary action is booking: make prominent "Book now" / "Book online" / "Check availability" buttons that link to it, and consider a dedicated booking section that embeds it inline via <iframe src="THE_BOOKING_URL" title="Online booking" loading="lazy" style="width:100%;height:720px;border:0"></iframe> (the title attribute is required for accessibility). Still surface the phone number as a secondary way to reach them.
 
-DO NOT add a cookie banner, an accessibility/compliance badge, or JSON-LD schema — those are injected automatically. Focus entirely on the site itself.
+AEO / SEO — these sites are sold on being answer-engine optimized, so this is essential:
+- Write a keyword-smart <title> (business + primary service + city) and put it in the HTML <head>; also return it as metaTitle. Return a strong metaDescription.
+- Include a VISIBLE "Frequently asked questions" section with 4–6 real, locally-specific Q&As (services, pricing/process, areas served) — and return the SAME Q&As as faqs so the FAQ schema matches the page exactly. This is what gets pulled into AI answers.
+- Weave the real location(s) and specific services into headings and copy naturally (e.g. "Family Law Attorney in Fort Myers"), and identify the correct schema.org businessType and the serviceAreas.
+- Use semantic HTML5 with one clear <h1> and logical heading order (already required for accessibility).
 
-Return your work by calling the write_site tool exactly once with the full HTML and a one-sentence summary.`;
+DO NOT add a cookie banner, an accessibility/compliance badge, or JSON-LD schema — those are injected automatically (we build the structured data from your metaTitle/businessType/serviceAreas/faqs). Focus on the site itself and the metadata.
+
+Return your work by calling the write_site tool exactly once with the full HTML, a one-sentence summary, and the AEO metadata (metaTitle, metaDescription, businessType, serviceAreas, faqs).`;
 
 const WRITE_SITE_TOOL: Anthropic.Tool = {
   name: "write_site",
-  description: "Provide the complete, self-contained HTML document for the page.",
+  description: "Provide the complete, self-contained HTML document for the page plus its AEO/SEO metadata.",
   input_schema: {
     type: "object",
     properties: {
       html: { type: "string", description: "The full HTML document, from <!DOCTYPE html> to </html>." },
       summary: { type: "string", description: "One sentence on the design direction you took." },
+      metaTitle: {
+        type: "string",
+        description: "SEO <title> for the page: business + primary service + city, ≤ 60 chars. Also put this in the HTML's <title>.",
+      },
+      metaDescription: {
+        type: "string",
+        description: "Compelling meta description, 120–155 chars, with the primary service and location.",
+      },
+      businessType: {
+        type: "string",
+        description:
+          "The most specific schema.org business @type for this business (e.g. Attorney, LegalService, Dentist, RoofingContractor, HVACBusiness, Electrician, Restaurant, HairSalon, AutoRepair). Use 'LocalBusiness' only if none fits.",
+      },
+      serviceAreas: {
+        type: "array",
+        items: { type: "string" },
+        description: "The cities/towns/regions this business serves (for areaServed). Pull from the content.",
+      },
+      faqs: {
+        type: "array",
+        description:
+          "4–6 genuinely useful FAQs a local customer would ask (service, pricing, area, process). These MUST also appear as a visible FAQ section in the HTML — the schema and the page must match.",
+        items: {
+          type: "object",
+          properties: {
+            question: { type: "string" },
+            answer: { type: "string" },
+          },
+          required: ["question", "answer"],
+        },
+      },
     },
     required: ["html", "summary"],
   },
@@ -149,7 +216,7 @@ export async function generateCustomSite(input: DesignInput): Promise<DesignResu
 
   const client = new Anthropic();
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: userPrompt(input) }];
-  let last: { html: string; summary: string; report: ValidationReport } | null = null;
+  let last: { html: string; summary: string; report: ValidationReport; meta: DesignMeta } | null = null;
 
   for (let attempt = 0; attempt <= MAX_FIX_ATTEMPTS; attempt++) {
     const stream = client.messages.stream({
@@ -170,11 +237,12 @@ export async function generateCustomSite(input: DesignInput): Promise<DesignResu
     const raw = toolUse.input as { html?: unknown; summary?: unknown };
     const html = typeof raw.html === "string" ? raw.html : "";
     const summary = typeof raw.summary === "string" ? raw.summary : "Generated a custom design.";
+    const meta = parseMeta(toolUse.input as Record<string, unknown>);
     const report = await validate(html, input);
-    last = { html, summary, report };
+    last = { html, summary, report, meta };
 
     if (report.ok) {
-      return { html, report, summary, dryRun: false };
+      return { html, report, summary, dryRun: false, meta };
     }
 
     // Feed the specific failures back so the model fixes them and re-submits.
@@ -195,7 +263,7 @@ export async function generateCustomSite(input: DesignInput): Promise<DesignResu
 
   // Return the best attempt even if it still has issues — the caller surfaces
   // the report, and the publish gate will still block a non-compliant page.
-  return { html: last!.html, report: last!.report, summary: last!.summary, dryRun: false };
+  return { html: last!.html, report: last!.report, summary: last!.summary, dryRun: false, meta: last!.meta };
 }
 
 // General "describe a change" edit for a custom-HTML page: applies the

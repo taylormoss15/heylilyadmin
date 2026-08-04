@@ -55,6 +55,13 @@ export const businessDataSchema = z.object({
   hours: z.array(z.object({ label: z.string(), value: z.string() })).default([]),
   services: z.array(z.object({ name: z.string(), description: z.string().optional() })).default([]),
   social: z.array(z.object({ label: z.string(), href: z.string() })).default([]),
+
+  // ---- AEO / SEO metadata (drives structured data + meta tags) ----
+  businessType: z.string().optional(), // schema.org @type, e.g. "Attorney", "Dentist"
+  serviceAreas: z.array(z.string()).default([]), // cities/regions served (areaServed)
+  faqs: z.array(z.object({ question: z.string(), answer: z.string() })).default([]),
+  seoTitle: z.string().optional(),
+  seoDescription: z.string().optional(),
 });
 export type BusinessData = z.infer<typeof businessDataSchema>;
 
@@ -223,6 +230,8 @@ export function starterSite(businessName: string): {
       { name: "Service two", description: "Describe your second service." },
     ],
     social: [],
+    serviceAreas: [],
+    faqs: [],
   };
 
   const homeIr: PageIR = {
