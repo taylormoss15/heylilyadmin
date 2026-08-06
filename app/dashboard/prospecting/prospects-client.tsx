@@ -4,6 +4,36 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { outcomeFor } from "@/lib/prospecting/issues";
 import type { AeoCheck } from "@/lib/prospecting/aeo";
+import { trustBand } from "@/lib/prospecting/trust-score";
+
+interface TrustBreakdown {
+  pillars: { compliance: number; seo: number; aeo: number; experience: number };
+  capped: boolean;
+  band: { label: string; tone: string };
+}
+
+const TONE_TEXT: Record<string, string> = {
+  excellent: "text-emerald-600",
+  good: "text-emerald-600",
+  fair: "text-amber-600",
+  poor: "text-orange-600",
+  critical: "text-red-600",
+};
+
+function trustFor(score: number | null): { label: string; cls: string } {
+  if (score === null) return { label: "—", cls: "text-slate-400" };
+  const b = trustBand(score);
+  return { label: b.label, cls: TONE_TEXT[b.tone] ?? "text-slate-600" };
+}
+
+function parseTrust(json: string | null): TrustBreakdown | null {
+  try {
+    const o = JSON.parse(json || "");
+    return o && o.pillars ? (o as TrustBreakdown) : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface Issue {
   id: string;
@@ -40,19 +70,11 @@ export interface ProspectRow {
   source: string;
   leadEmail: string | null;
   leadName: string | null;
+  trustScore: number | null;
+  trustBreakdown: string | null;
 }
 
 type SortKey = "score" | "businessName" | "url" | "industry" | "estimatedRevenue" | "employees";
-
-// How risky a score reads. Per policy, anything below 100 carries exposure —
-// so only a perfect score is "green".
-function riskFor(score: number | null): { label: string; cls: string } {
-  if (score === null) return { label: "—", cls: "text-slate-400" };
-  if (score >= 100) return { label: "Compliant", cls: "text-emerald-600" };
-  if (score >= 85) return { label: "At risk", cls: "text-amber-600" };
-  if (score >= 60) return { label: "High risk", cls: "text-orange-600" };
-  return { label: "Severe", cls: "text-red-600" };
-}
 
 function hostOf(url: string): string {
   try {
@@ -186,11 +208,11 @@ export default function ProspectsClient({
     const dir = sortDir === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
       if (sortKey === "score") {
-        // Unscanned sort last regardless of direction.
-        if (a.score === null && b.score === null) return 0;
-        if (a.score === null) return 1;
-        if (b.score === null) return -1;
-        return (a.score - b.score) * dir;
+        // Sort by the Digital Trust Score. Unscanned sort last either way.
+        if (a.trustScore === null && b.trustScore === null) return 0;
+        if (a.trustScore === null) return 1;
+        if (b.trustScore === null) return -1;
+        return (a.trustScore - b.trustScore) * dir;
       }
       const av = (a[sortKey] ?? "").toString().toLowerCase();
       const bv = (b[sortKey] ?? "").toString().toLowerCase();
@@ -268,7 +290,7 @@ export default function ProspectsClient({
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="cursor-pointer px-4 py-3" onClick={() => toggleSort("score")}>Risk{arrow("score")}</th>
+              <th className="cursor-pointer px-4 py-3" onClick={() => toggleSort("score")}>Trust Score{arrow("score")}</th>
               <th className="cursor-pointer px-4 py-3" onClick={() => toggleSort("businessName")}>Business{arrow("businessName")}</th>
               <th className="cursor-pointer px-4 py-3" onClick={() => toggleSort("url")}>Website{arrow("url")}</th>
               <th className="cursor-pointer px-4 py-3" onClick={() => toggleSort("industry")}>Industry{arrow("industry")}</th>
@@ -279,7 +301,7 @@ export default function ProspectsClient({
           </thead>
           <tbody>
             {visible.map((r) => {
-              const risk = riskFor(r.score);
+              const risk = trustFor(r.trustScore);
               const isOpen = expanded === r.id;
               return (
                 <FragmentRow
@@ -360,7 +382,7 @@ function FragmentRow({
         <td className="px-4 py-3">
           {r.scanStatus === "COMPLETED" ? (
             <span className={`font-semibold ${risk.cls}`}>
-              {r.score}/100
+              {r.trustScore ?? "—"}/100
               <span className="block text-[11px] font-normal">{risk.label}</span>
             </span>
           ) : r.scanStatus === "FAILED" ? (
@@ -473,6 +495,7 @@ function DetailsPanel({
 
   return (
     <div className="space-y-4">
+    <TrustScorePanel r={r} />
     <SiteIntelSection r={r} />
     <IssuesSection r={r} prevalence={prevalence} totalScanned={totalScanned} />
     <div className="grid gap-4 md:grid-cols-3">
@@ -548,6 +571,64 @@ function DetailsPanel({
         </div>
       </div>
     </div>
+    </div>
+  );
+}
+
+// The headline Digital Trust Score and its four pillars. The compliance cap is
+// called out explicitly — it's the story that makes prospects act.
+function TrustScorePanel({ r }: { r: ProspectRow }) {
+  if (r.scanStatus !== "COMPLETED" || r.trustScore === null) return null;
+  const t = parseTrust(r.trustBreakdown);
+  const band = trustFor(r.trustScore);
+
+  const pillars: { label: string; weight: string; value: number }[] = t
+    ? [
+        { label: "Compliance", weight: "35%", value: t.pillars.compliance },
+        { label: "Search (SEO)", weight: "25%", value: t.pillars.seo },
+        { label: "AI answers (AEO)", weight: "20%", value: t.pillars.aeo },
+        { label: "Experience", weight: "20%", value: t.pillars.experience },
+      ]
+    : [];
+
+  const barColor = (v: number) =>
+    v >= 85 ? "bg-emerald-500" : v >= 60 ? "bg-amber-500" : v >= 40 ? "bg-orange-500" : "bg-red-500";
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex items-center gap-4">
+        <div className="text-center">
+          <div className={`text-3xl font-extrabold ${band.cls}`}>
+            {r.trustScore}
+            <span className="text-base font-semibold text-slate-400">/100</span>
+          </div>
+          <div className={`text-[11px] font-semibold ${band.cls}`}>{band.label}</div>
+        </div>
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900">Digital Trust Score</h4>
+          <p className="text-xs text-slate-500">
+            {t?.capped
+              ? "Held to the compliance cap — an accessibility issue means it can't score above 80, no matter how good the rest is."
+              : "One number across compliance, search, AI answers, and experience."}
+          </p>
+        </div>
+      </div>
+
+      {pillars.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {pillars.map((p) => (
+            <div key={p.label} className="flex items-center gap-3 text-xs">
+              <span className="w-28 shrink-0 text-slate-500">
+                {p.label} <span className="text-slate-300">· {p.weight}</span>
+              </span>
+              <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                <span className={`block h-full rounded-full ${barColor(p.value)}`} style={{ width: `${p.value}%` }} />
+              </span>
+              <span className="w-8 text-right font-mono text-slate-700">{p.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -804,6 +885,8 @@ function toRow(p: {
   source?: string;
   leadEmail?: string | null;
   leadName?: string | null;
+  trustScore?: number | null;
+  trustBreakdown?: string | null;
 }): ProspectRow {
   return {
     id: p.id,
@@ -833,6 +916,8 @@ function toRow(p: {
     source: p.source ?? "manual",
     leadEmail: p.leadEmail ?? null,
     leadName: p.leadName ?? null,
+    trustScore: p.trustScore ?? null,
+    trustBreakdown: p.trustBreakdown ?? null,
   };
 }
 

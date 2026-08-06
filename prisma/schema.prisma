@@ -47,6 +47,10 @@ model Prospect {
   violations     String? // JSON-encoded axe summary
   scannedAt      DateTime?
 
+  // The Digital Trust Score — the headline 0-100 number (with pillar breakdown).
+  trustScore     Int?
+  trustBreakdown String? // JSON: { pillars, capped, band }
+
   // Site intelligence gathered in the same quick scan.
   platform           String? // detected builder/CMS (Wix, WordPress, GoDaddy, Squarespace…)
   builtBy            String? // "powered by / website by" credit found on the page

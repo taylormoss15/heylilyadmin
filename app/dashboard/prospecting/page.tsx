@@ -34,7 +34,7 @@ export default async function ProspectingPage() {
   // Converted prospects fall off the board — they live in Accounts now.
   const prospects = await prisma.prospect.findMany({
     where: { status: { not: "CONVERTED" } },
-    orderBy: [{ score: "asc" }, { createdAt: "desc" }],
+    orderBy: [{ trustScore: "asc" }, { createdAt: "desc" }],
   });
 
   // Prevalence across everything we've scanned, for the "seen on N of M sites"
@@ -74,6 +74,8 @@ export default async function ProspectingPage() {
     source: p.source,
     leadEmail: p.leadEmail,
     leadName: p.leadName,
+    trustScore: p.trustScore,
+    trustBreakdown: p.trustBreakdown,
   }));
 
   return <ProspectsClient initial={rows} prevalence={prevalence} totalScanned={scanned.length} />;

@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 import { scanOpenPage, type ScanSummary } from "@/lib/integrations/accessibility-scanner";
 import { inferProspectProfile } from "@/lib/prospecting/industry";
 import { detectPlatform, computeAeo, type TechSignals, type AeoCheck } from "@/lib/prospecting/aeo";
+import { computeTrustScore, type TrustScore } from "@/lib/prospecting/trust-score";
 
 // Lightweight prospecting scan: load a prospect's site once and learn as much
 // as we can in a single pass — the business identity, the real WCAG risk
@@ -21,6 +22,7 @@ export interface ProspectScrape {
   professionalismNote?: string;
   aeoScore?: number;
   aeoChecks?: AeoCheck[];
+  trust: TrustScore;
   scan: ScanSummary;
 }
 
@@ -183,6 +185,12 @@ export async function scanProspect(url: string): Promise<ProspectScrape> {
     };
     const platform = detectPlatform(tech);
     const aeo = computeAeo(tech, url);
+    const trust = computeTrustScore({
+      accessibilityScore: scan.score,
+      violationCount: scan.violationCount,
+      seriousCount: scan.seriousCount,
+      aeoChecks: aeo.checks,
+    });
 
     // Best-effort AI enrichment: industry, size, professionalism, who built it.
     const profile = await inferProspectProfile({
@@ -207,6 +215,7 @@ export async function scanProspect(url: string): Promise<ProspectScrape> {
       professionalismNote: profile.professionalismNote,
       aeoScore: aeo.score,
       aeoChecks: aeo.checks,
+      trust,
       scan,
     };
   } finally {

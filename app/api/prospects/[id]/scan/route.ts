@@ -27,6 +27,8 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
         professionalismNote: result.professionalismNote ?? null,
         aeoScore: result.aeoScore ?? null,
         aeoChecks: result.aeoChecks ? JSON.stringify(result.aeoChecks) : null,
+        trustScore: result.trust.score,
+        trustBreakdown: JSON.stringify({ pillars: result.trust.pillars, capped: result.trust.capped, band: result.trust.band }),
         scanStatus: "COMPLETED",
         scanError: null,
         score: result.scan.score,
