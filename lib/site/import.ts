@@ -30,6 +30,7 @@ export interface ImportResult {
   businessData: BusinessData;
   homeIr: PageIR;
   screenshot?: string; // data: URL (JPEG) of the original site, for demos
+  html?: string; // raw page HTML, for scoring the "before" on-page signals
 }
 
 function launchBrowser() {
@@ -128,11 +129,13 @@ export async function importFromUrl(rawUrl: string): Promise<ImportResult> {
       screenshot = undefined;
     }
 
+    const pageHtml = await page.content().catch(() => undefined);
+
     const content = shapeContent(raw, url);
     const businessData = toBusinessData(content);
     const homeIr = toSeedIr(content);
 
-    return { sourceUrl: url, content, scan, businessData, homeIr, screenshot };
+    return { sourceUrl: url, content, scan, businessData, homeIr, screenshot, html: pageHtml };
   } finally {
     await browser.close();
   }

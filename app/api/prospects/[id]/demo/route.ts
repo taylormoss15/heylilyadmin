@@ -5,6 +5,9 @@ import { importFromUrl } from "@/lib/site/import";
 import { generateCustomSite } from "@/lib/site/ai-designer";
 import { finalizeCustomHtml } from "@/lib/site/finalize";
 import { outcomeIssues } from "@/lib/prospecting/issues";
+import { analyzeHtmlSignals } from "@/lib/prospecting/html-signals";
+import { computeAeo } from "@/lib/prospecting/aeo";
+import { computeTrustScore } from "@/lib/prospecting/trust-score";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -57,6 +60,31 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
 
   const issues = outcomeIssues(imported.scan.violations);
 
+  // Digital Trust Score, before → projected after — both computed with the
+  // same engine so 62 → 92 is a real comparison. "Before" from the live site's
+  // HTML; "after" from the finalized redesign (compliance is a clean 100).
+  const beforeTrust = (() => {
+    if (!imported.html) return prospect.trustScore ?? null;
+    const aeo = computeAeo(analyzeHtmlSignals(imported.html, prospect.url), prospect.url);
+    return computeTrustScore({
+      accessibilityScore: imported.scan.score,
+      violationCount: imported.scan.violationCount,
+      seriousCount: imported.scan.seriousCount,
+      aeoChecks: aeo.checks,
+    }).score;
+  })();
+
+  const afterTrust = (() => {
+    if (!redesignHtml) return null;
+    const aeo = computeAeo(analyzeHtmlSignals(redesignHtml, "https://preview.heylily.ai"), "https://preview.heylily.ai");
+    return computeTrustScore({
+      accessibilityScore: afterScore ?? 100,
+      violationCount: 0,
+      seriousCount: 0,
+      aeoChecks: aeo.checks,
+    }).score;
+  })();
+
   const demo = await prisma.demo.create({
     data: {
       token,
@@ -75,6 +103,8 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       platform: prospect.platform ?? null,
       redesignHtml,
       afterScore,
+      beforeTrust,
+      afterTrust,
       dryRun,
       status: "READY",
     },

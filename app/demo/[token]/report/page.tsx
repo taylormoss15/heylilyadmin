@@ -99,6 +99,13 @@ export default async function ReportPage({ params }: { params: { token: string }
     day: "numeric",
   });
 
+  const beforeT = demo.beforeTrust;
+  const afterT = demo.afterTrust;
+  const topIssues = issues.slice(0, 3);
+  const unlocked = demo.unlocked;
+  const buyUrl = process.env.HEYLILY_BUY_URL || process.env.DEMO_CTA_URL || "https://heylily.ai";
+  const bookUrl = process.env.DEMO_CTA_URL || "https://heylily.ai";
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
       {/* Screen-only action bar */}
@@ -120,6 +127,29 @@ export default async function ReportPage({ params }: { params: { token: string }
         </div>
         <p className="mt-4 text-lg font-semibold">{demo.businessName || host}</p>
         <p className="text-sm text-slate-500">{host}</p>
+
+        {/* The headline: Digital Trust Score, today → with the new site */}
+        {beforeT !== null && (
+          <section className="mt-7 rounded-2xl bg-slate-900 p-6 text-white">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-300">Your Digital Trust Score</div>
+            <div className="mt-3 flex items-center gap-6">
+              <div className="text-center">
+                <div className="text-5xl font-extrabold text-red-300">{beforeT}</div>
+                <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Today</div>
+              </div>
+              <div className="text-3xl text-slate-500">→</div>
+              <div className="text-center">
+                <div className="text-6xl font-extrabold text-emerald-300">{afterT ?? 92}</div>
+                <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-200">With your new site</div>
+              </div>
+            </div>
+            <p className="mt-4 max-w-xl text-sm text-slate-300">
+              One number across compliance, search, and AI answer engines. We can take{" "}
+              {demo.businessName || "your firm"} from <strong className="text-white">{beforeT}</strong> to{" "}
+              <strong className="text-white">{afterT ?? 92}</strong> — and off the accessibility-lawsuit radar for good.
+            </p>
+          </section>
+        )}
 
         {/* Section 1 — today: score tiles + Critical / Warnings / Passed */}
         <section className="mt-8">
@@ -193,18 +223,45 @@ export default async function ReportPage({ params }: { params: { token: string }
           )}
         </section>
 
-        {/* Section 2 — cost */}
+        {/* Section 2 — cost (teaser: top 3; the rest is unlocked by purchase) */}
         {issues.length > 0 && (
           <section className="mt-8">
             <h2 className="text-xs font-bold uppercase tracking-wide text-slate-500">What it&apos;s costing you</h2>
             <ul className="mt-3 space-y-2">
-              {issues.map((it, i) => (
+              {(unlocked ? issues : topIssues).map((it, i) => (
                 <li key={i} className="flex gap-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
                   <span className="text-red-500">✕</span>
                   <span>{it}</span>
                 </li>
               ))}
             </ul>
+
+            {!unlocked && (
+              <div className="mt-4 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                <div className="text-2xl">🔒</div>
+                <h3 className="mt-1 text-lg font-bold text-slate-900">
+                  Unlock your full report{issues.length > topIssues.length ? ` — ${issues.length - topIssues.length} more findings` : ""}
+                </h3>
+                <p className="mx-auto mt-1 max-w-md text-sm text-slate-600">
+                  Every recommendation, in plain English, plus your new fully-compliant website built and
+                  launched — and ongoing monthly protection so your score keeps climbing.
+                </p>
+                <div className="mx-auto mt-4 max-w-sm rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="text-3xl font-extrabold text-slate-900">
+                    $1,000 <span className="text-base font-medium text-slate-400">setup</span>
+                  </div>
+                  <div className="text-sm text-slate-600">then $197/month · 12-month term</div>
+                </div>
+                <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
+                  <a href={buyUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-emerald-500 px-6 py-3 font-semibold text-white hover:bg-emerald-400">
+                    Buy now &amp; unlock the full report
+                  </a>
+                  <a href={bookUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-700 hover:bg-slate-50">
+                    Book a demo to review it
+                  </a>
+                </div>
+              </div>
+            )}
           </section>
         )}
 

@@ -28,8 +28,8 @@ export default async function DemoPage({ params }: { params: { token: string } }
       sourceUrl={demo.sourceUrl}
       beforeShot={demo.beforeShot}
       siteSrc={`/demo/${demo.token}/site`}
-      beforeScore={demo.beforeScore}
-      afterScore={demo.afterScore}
+      beforeTrust={demo.beforeTrust}
+      afterTrust={demo.afterTrust}
       reportUrl={`/demo/${demo.token}/report`}
       ctaUrl={ctaUrl}
     />

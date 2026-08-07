@@ -117,6 +117,13 @@ model Demo {
   afterScore   Float?
   dryRun       Boolean @default(false) // true when built in mock mode (no AI key)
 
+  // Digital Trust Score, before → projected after (the 62 → 92 story).
+  beforeTrust Int?
+  afterTrust  Int?
+
+  // The full report (all recommendations) is unlocked by purchase.
+  unlocked Boolean @default(false)
+
   status    String   @default("PENDING") // PENDING | READY | FAILED
   error     String?
 

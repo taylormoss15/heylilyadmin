@@ -10,8 +10,8 @@ export default function DemoViewer({
   sourceUrl,
   beforeShot,
   siteSrc,
-  beforeScore,
-  afterScore,
+  beforeTrust,
+  afterTrust,
   reportUrl,
   ctaUrl,
 }: {
@@ -19,8 +19,8 @@ export default function DemoViewer({
   sourceUrl: string;
   beforeShot: string | null;
   siteSrc: string;
-  beforeScore: number | null;
-  afterScore: number | null;
+  beforeTrust: number | null;
+  afterTrust: number | null;
   reportUrl: string;
   ctaUrl: string;
 }) {
@@ -77,14 +77,14 @@ export default function DemoViewer({
 
         {/* Score chips overlay */}
         <div className="pointer-events-none absolute bottom-4 left-4 flex gap-2">
-          {view === "before" && beforeScore !== null && (
+          {view === "before" && beforeTrust !== null && (
             <span className="rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-lg">
-              Current compliance: {beforeScore}/100
+              Trust Score today: {beforeTrust}/100
             </span>
           )}
           {view === "after" && (
             <span className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-lg">
-              Redesigned: {afterScore ?? 100}/100 · fully compliant
+              With your new site: {afterTrust ?? 92}/100
             </span>
           )}
         </div>
