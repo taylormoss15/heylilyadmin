@@ -14,13 +14,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Launchpad digest (paid but not live)
-        run: >
-          curl -fsS -X POST
-          -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
-          https://admin.heylily.ai/api/cron/launchpad-digest
+        run: |
+          code=$(curl -sS -o /tmp/body.txt -w "%{http_code}" -X POST \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            https://admin.heylily.ai/api/cron/launchpad-digest)
+          echo "HTTP $code"
+          echo "Response: $(cat /tmp/body.txt)"
+          if [ "$code" != "200" ]; then
+            echo "::error::Digest failed with HTTP $code — check that CRON_SECRET matches in GitHub and Coolify."
+            exit 1
+          fi
 
       - name: Run compliance scans for accounts that are due
-        run: >
-          curl -fsS -X POST
-          -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
-          https://admin.heylily.ai/api/cron/accessibility-scan
+        run: |
+          code=$(curl -sS -o /tmp/body.txt -w "%{http_code}" -X POST \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            https://admin.heylily.ai/api/cron/accessibility-scan)
+          echo "HTTP $code"
+          echo "Response: $(cat /tmp/body.txt)"
+          if [ "$code" != "200" ]; then
+            echo "::error::Scan trigger failed with HTTP $code."
+            exit 1
+          fi
