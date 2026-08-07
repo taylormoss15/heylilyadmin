@@ -19,6 +19,12 @@ const SECTIONS: { href: string; label: string; hint: string; match: (p: string) 
     match: (p) => p.startsWith("/dashboard/prospecting"),
   },
   {
+    href: "/dashboard/launchpad",
+    label: "Launchpad",
+    hint: "Paid → get them live",
+    match: (p) => p.startsWith("/dashboard/launchpad"),
+  },
+  {
     href: "/dashboard/demos",
     label: "Demos",
     hint: "Sent demos & opens",

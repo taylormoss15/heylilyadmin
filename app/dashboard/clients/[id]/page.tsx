@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TIER_CONFIG } from "@/lib/tier-config";
 import type { Tier } from "@/lib/types";
+import { computeImplementation } from "@/lib/onboarding";
+import PaidToggle from "./paid-toggle";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +19,28 @@ export default async function ClientOverviewPage({ params }: { params: { id: str
       uptimeMonitor: true,
       ghlSyncLogs: { orderBy: { createdAt: "desc" }, take: 1 },
       formSubmissions: { orderBy: { createdAt: "desc" }, take: 5 },
+      sites: { select: { cfDeployedAt: true, cfDomain: true, pages: { select: { customHtml: true } } } },
       _count: { select: { emailSeats: true, sites: true, accessibilityScans: true, formSubmissions: true } },
     },
   });
 
   if (!client) notFound();
+
+  const monitorScan = await prisma.accessibilityScan.findFirst({
+    where: { clientId: client.id, kind: "monitor" },
+    orderBy: { scannedAt: "desc" },
+    select: { violationCount: true, status: true },
+  });
+  const impl = computeImplementation({
+    paidAt: client.paidAt,
+    hasDesign: client.sites.some((s) => s.pages.some((p) => p.customHtml)),
+    domainActive: client.cfZoneStatus === "active",
+    deployed: client.sites.some((s) => s.cfDeployedAt),
+    customDomain: client.sites.some((s) => s.cfDomain),
+    formRouted: Boolean(client.notificationEmail),
+    hasMonitorScan: Boolean(monitorScan),
+    monitorClean: Boolean(monitorScan && monitorScan.status === "COMPLETED" && monitorScan.violationCount === 0),
+  });
 
   const base = `/dashboard/clients/${client.id}`;
   const lastScan = client.accessibilityScans[0];
@@ -82,6 +101,38 @@ export default async function ClientOverviewPage({ params }: { params: { id: str
           </Link>
         </div>
       )}
+
+      {/* Go-live checklist */}
+      <div
+        className={`card ${
+          impl.live ? "border-emerald-200" : impl.paid ? "border-amber-300" : ""
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-medium text-slate-900">
+              {impl.live ? "✓ Fully live" : impl.paid ? "Getting live" : "Go-live checklist"}
+            </h2>
+            <p className="text-xs text-slate-500">
+              {impl.doneCount}/{impl.total} complete
+              {!impl.live && impl.blockedAt ? ` · next: ${impl.blockedAt}` : ""}
+              {impl.paid ? " · paid" : ""}
+            </p>
+          </div>
+          <PaidToggle clientId={client.id} paid={impl.paid} />
+        </div>
+        <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+          {impl.steps.map((s) => (
+            <li key={s.key} className="flex items-start gap-2 text-sm">
+              <span className={s.done ? "text-emerald-500" : "text-slate-300"}>{s.done ? "✓" : "○"}</span>
+              <span>
+                <span className={s.done ? "text-slate-700" : "font-medium text-slate-800"}>{s.label}</span>
+                {!s.done && s.hint && <span className="block text-xs text-slate-400">{s.hint}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {cards.map((c) => (

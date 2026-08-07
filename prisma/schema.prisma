@@ -161,6 +161,10 @@ model Client {
   cfNameservers String? // JSON array of the two nameservers to set
   cfZoneStatus  String? // "pending" until propagated, then "active"
 
+  // Set when the customer has paid — a paid, not-yet-live account is the
+  // highest priority. Auto-set by checkout later; manual for now.
+  paidAt        DateTime?
+
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
