@@ -1,0 +1,26 @@
+name: Scheduled jobs
+
+# Runs Hey Lily's daily jobs against the live app. Free, in-repo, nothing
+# external to manage. Add a repo secret CRON_SECRET (Settings → Secrets and
+# variables → Actions) matching the CRON_SECRET set in Coolify, and it runs
+# itself. Use "Run workflow" (workflow_dispatch) to test on demand.
+on:
+  schedule:
+    - cron: "0 13 * * *" # daily at 13:00 UTC (~8–9am ET)
+  workflow_dispatch: {}
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Launchpad digest (paid but not live)
+        run: >
+          curl -fsS -X POST
+          -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
+          https://admin.heylily.ai/api/cron/launchpad-digest
+
+      - name: Run compliance scans for accounts that are due
+        run: >
+          curl -fsS -X POST
+          -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
+          https://admin.heylily.ai/api/cron/accessibility-scan
