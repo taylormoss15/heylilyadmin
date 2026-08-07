@@ -156,6 +156,11 @@ model Client {
   internalNotes   String? // free-form ops/troubleshooting notes
   notificationEmail String? // where the site's contact-form entries are emailed
 
+  // Cloudflare zone (domain connected via nameservers, registrar unchanged).
+  cfZoneId      String?
+  cfNameservers String? // JSON array of the two nameservers to set
+  cfZoneStatus  String? // "pending" until propagated, then "active"
+
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 

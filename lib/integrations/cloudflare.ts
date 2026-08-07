@@ -75,11 +75,55 @@ async function enableWorkersDev(name: string): Promise<string | null> {
   return sub.subdomain ? `https://${name}.${sub.subdomain}.workers.dev` : null;
 }
 
-async function findZoneId(domain: string): Promise<string | null> {
+interface ZoneRecord {
+  id: string;
+  status: string;
+  name_servers?: string[];
+}
+
+async function findZone(domain: string): Promise<ZoneRecord | null> {
   const { auth } = cfg();
   const res = await fetch(`${API}/zones?name=${encodeURIComponent(domain)}`, { headers: auth });
-  const zones = await cfJson<{ id: string }[]>(res).catch(() => []);
-  return zones && zones[0] ? zones[0].id : null;
+  const zones = await cfJson<ZoneRecord[]>(res).catch(() => [] as ZoneRecord[]);
+  return zones && zones[0] ? zones[0] : null;
+}
+
+async function findZoneId(domain: string): Promise<string | null> {
+  const zone = await findZone(domain);
+  return zone ? zone.id : null;
+}
+
+export function cleanDomain(domain: string): string {
+  return domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "");
+}
+
+export interface ZoneInfo {
+  zoneId: string;
+  nameServers: string[]; // the two Cloudflare nameservers to set at the registrar
+  status: string; // "pending" until nameservers propagate, then "active"
+  alreadyExisted: boolean;
+}
+
+// Add the client's domain to Cloudflare (or find it if already there) so the
+// client can keep their registrar and just repoint nameservers. Returns the
+// exact nameservers to set and the current activation status.
+export async function ensureZone(domain: string): Promise<ZoneInfo> {
+  const name = cleanDomain(domain);
+  if (!name.includes(".")) throw new Error("Enter a valid domain (e.g. example.com).");
+
+  const existing = await findZone(name);
+  if (existing) {
+    return { zoneId: existing.id, nameServers: existing.name_servers ?? [], status: existing.status, alreadyExisted: true };
+  }
+
+  const { account, auth } = cfg();
+  const res = await fetch(`${API}/zones`, {
+    method: "POST",
+    headers: { ...auth, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, account: { id: account }, type: "full" }),
+  });
+  const zone = await cfJson<ZoneRecord>(res);
+  return { zoneId: zone.id, nameServers: zone.name_servers ?? [], status: zone.status, alreadyExisted: false };
 }
 
 async function attachCustomDomain(name: string, hostname: string, zoneId: string): Promise<void> {

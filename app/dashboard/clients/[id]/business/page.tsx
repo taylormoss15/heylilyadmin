@@ -2,12 +2,22 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import StatusEditor from "../status-editor";
 import BusinessForm from "./business-form";
+import DomainConnect from "./domain-connect";
 
 export const dynamic = "force-dynamic";
 
 export default async function ClientBusinessPage({ params }: { params: { id: string } }) {
   const client = await prisma.client.findUnique({ where: { id: params.id } });
   if (!client) notFound();
+
+  const nameServers: string[] = (() => {
+    try {
+      const a = JSON.parse(client.cfNameservers || "[]");
+      return Array.isArray(a) ? a : [];
+    } catch {
+      return [];
+    }
+  })();
 
   return (
     <div className="space-y-6">
@@ -33,6 +43,13 @@ export default async function ClientBusinessPage({ params }: { params: { id: str
           notificationEmail: client.notificationEmail ?? "",
           hasTrackers: client.hasTrackers,
         }}
+      />
+
+      <DomainConnect
+        clientId={client.id}
+        domain={client.domain ?? client.siteUrl ?? null}
+        initialNameServers={nameServers}
+        initialStatus={client.cfZoneStatus ?? null}
       />
     </div>
   );
