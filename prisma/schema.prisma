@@ -307,6 +307,13 @@ model Site {
   theme            String // JSON: Theme
   businessData     String // JSON: BusinessData
   showCookieBanner Boolean  @default(false)
+
+  // Cloudflare deployment (Workers) — set when the site is published live.
+  cfScript     String? // the Worker script name
+  cfPreviewUrl String? // instant workers.dev URL
+  cfDomain     String? // attached custom domain, if any
+  cfDeployedAt DateTime?
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

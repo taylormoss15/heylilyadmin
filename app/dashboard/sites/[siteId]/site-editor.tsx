@@ -104,6 +104,10 @@ export default function SiteEditor(props: {
   const [publishDone, setPublishDone] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
 
+  const [cfBusy, setCfBusy] = useState(false);
+  const [cfError, setCfError] = useState<string | null>(null);
+  const [cfResult, setCfResult] = useState<{ liveUrl: string | null; previewUrl: string | null; customDomain: string | null; domainNote?: string } | null>(null);
+
   async function save(): Promise<boolean> {
     setSaving(true);
     setError(null);
@@ -183,6 +187,30 @@ export default function SiteEditor(props: {
   async function exportPage() {
     const ok = await save();
     if (ok) window.open(`/api/pages/${props.pageId}/export`, "_blank");
+  }
+
+  async function deployCloudflare() {
+    setCfBusy(true);
+    setCfError(null);
+    setCfResult(null);
+    const ok = await save();
+    if (!ok) {
+      setCfBusy(false);
+      return;
+    }
+    const res = await fetch(`/api/sites/${props.siteId}/publish-cloudflare`, { method: "POST" });
+    setCfBusy(false);
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 422) {
+      setReport(data.report);
+      setCfError("Not ready to go live — fix the checks below first.");
+      return;
+    }
+    if (!res.ok) {
+      setCfError(typeof data.error === "string" ? data.error : "Cloudflare deploy failed");
+      return;
+    }
+    setCfResult(data);
   }
 
   async function runAi() {
@@ -518,12 +546,39 @@ export default function SiteEditor(props: {
               onClick={publish}
               disabled={publishing || !report?.ok}
               title={report?.ok ? "" : "Publish unlocks after a 100%-clean validation"}
+              className="btn-secondary text-sm"
+            >
+              {publishing ? "…" : "GHL export"}
+            </button>
+            <button
+              onClick={deployCloudflare}
+              disabled={cfBusy || !report?.ok}
+              title={report?.ok ? "Push live to Cloudflare" : "Unlocks after a 100%-clean validation"}
               className="btn text-sm"
             >
-              {publishing ? "…" : "Publish"}
+              {cfBusy ? "Deploying…" : "Deploy live"}
             </button>
           </div>
         </div>
+
+        {cfError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{cfError}</p>}
+        {cfResult && (
+          <div className="card space-y-2 border-emerald-200">
+            <h3 className="text-sm font-semibold text-emerald-800">🎉 Live on Cloudflare</h3>
+            {cfResult.liveUrl && (
+              <a href={cfResult.liveUrl} target="_blank" rel="noreferrer" className="block text-sm text-brand-600 hover:underline">
+                {cfResult.liveUrl}
+              </a>
+            )}
+            {cfResult.customDomain ? (
+              <p className="text-xs text-emerald-700">Custom domain attached — SSL is provisioning automatically.</p>
+            ) : (
+              <p className="text-xs text-slate-500">
+                Instant preview URL is live with SSL.{cfResult.domainNote ? ` ${cfResult.domainNote}` : ""}
+              </p>
+            )}
+          </div>
+        )}
 
         {!report?.ok && !publishReady && (
           <p className="text-xs text-slate-500">
