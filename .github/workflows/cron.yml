@@ -3,7 +3,7 @@ name: Scheduled jobs
 # Runs Hey Lily's daily jobs against the live app. Add a repo secret
 # CRON_SECRET (Settings → Secrets and variables → Actions) matching the
 # CRON_SECRET set in Coolify. Use "Run workflow" (workflow_dispatch) to test.
-# The result (HTTP status + response) is written to the run Summary page.
+# Each job's HTTP status + response is written to the run Summary page.
 on:
   schedule:
     - cron: "0 13 * * *" # daily at 13:00 UTC (~8–9am ET)
@@ -20,9 +20,17 @@ jobs:
             https://admin.heylily.ai/api/cron/launchpad-digest || echo "000")
           body=$(cat /tmp/body.txt 2>/dev/null || echo "")
           echo "## Launchpad digest → HTTP $code" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "$body" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          if [ "$code" = "401" ]; then echo "**CRON_SECRET does not match** between GitHub and Coolify (or isn't set/redeployed in Coolify)." >> "$GITHUB_STEP_SUMMARY"; fi
+          echo '```' >> "$GITHUB_STEP_SUMMARY"; echo "$body" >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "HTTP $code — $body"
+          [ "$code" = "200" ]
+
+      - name: Compliance scans for accounts that are due
+        run: |
+          code=$(curl -sS -o /tmp/body.txt -w "%{http_code}" -X POST \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            https://admin.heylily.ai/api/cron/accessibility-scan || echo "000")
+          body=$(cat /tmp/body.txt 2>/dev/null || echo "")
+          echo "## Compliance scans → HTTP $code" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"; echo "$body" >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo "HTTP $code — $body"
           [ "$code" = "200" ]
