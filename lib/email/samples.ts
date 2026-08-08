@@ -6,6 +6,7 @@ import { contactFormEmail, launchpadDigestEmail, coldOutreachEmail, type BuiltEm
 export interface EmailSample {
   key: string;
   label: string;
+  category: string;
   description: string;
   build: () => BuiltEmail;
 }
@@ -18,6 +19,7 @@ export function emailSamples(): EmailSample[] {
     {
       key: "contact-form",
       label: "Contact-form enquiry",
+      category: "Customer-facing",
       description: "Sent to the client when someone fills out their website's contact form.",
       build: () =>
         contactFormEmail({
@@ -35,6 +37,7 @@ export function emailSamples(): EmailSample[] {
     {
       key: "launchpad-digest",
       label: "Launchpad daily digest",
+      category: "Hey Lily Admin",
       description: "Your daily ops email of paid accounts that aren't live yet.",
       build: () =>
         launchpadDigestEmail({
@@ -48,7 +51,8 @@ export function emailSamples(): EmailSample[] {
     },
     {
       key: "cold-outreach",
-      label: "Cold outreach (Chunk C)",
+      label: "Cold outreach — score email",
+      category: "Outreach / Sales",
       description: "The personalized cold email that will go to prospects with their score.",
       build: () =>
         coldOutreachEmail({

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 interface Sample {
   key: string;
   label: string;
+  category: string;
   description: string;
   subject: string;
   html: string;
@@ -15,6 +16,22 @@ export default function EmailPreview({ samples }: { samples: Sample[] }) {
   const [device, setDevice] = useState<"desktop" | "phone">("desktop");
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+
+  // Filter, then group by category for the sidebar.
+  const groups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = samples.filter(
+      (s) => !q || `${s.label} ${s.category} ${s.description} ${s.subject}`.toLowerCase().includes(q)
+    );
+    const byCat = new Map<string, Sample[]>();
+    for (const s of filtered) {
+      const list = byCat.get(s.category) ?? [];
+      list.push(s);
+      byCat.set(s.category, list);
+    }
+    return [...byCat.entries()];
+  }, [samples, query]);
 
   const sample = samples.find((s) => s.key === active) ?? samples[0];
 
@@ -37,20 +54,34 @@ export default function EmailPreview({ samples }: { samples: Sample[] }) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
-      {/* Template list */}
-      <div className="space-y-1">
-        {samples.map((s) => (
-          <button
-            key={s.key}
-            onClick={() => setActive(s.key)}
-            className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition ${
-              s.key === active ? "bg-brand-50 font-medium text-brand-700" : "text-slate-600 hover:bg-slate-50"
-            }`}
-          >
-            {s.label}
-            <span className="block text-[11px] font-normal text-slate-400">{s.description}</span>
-          </button>
+      {/* Template list — searchable, grouped by category */}
+      <div className="space-y-3">
+        <input
+          className="input w-full text-sm"
+          placeholder="Search templates…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {groups.map(([category, list]) => (
+          <div key={category}>
+            <div className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{category}</div>
+            <div className="space-y-1">
+              {list.map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => setActive(s.key)}
+                  className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+                    s.key === active ? "bg-brand-50 font-medium text-brand-700" : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {s.label}
+                  <span className="block text-[11px] font-normal text-slate-400">{s.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
+        {groups.length === 0 && <p className="px-1 text-xs text-slate-400">No templates match.</p>}
       </div>
 
       {/* Preview */}

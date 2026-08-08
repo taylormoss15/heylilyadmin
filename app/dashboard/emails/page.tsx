@@ -6,7 +6,14 @@ export const dynamic = "force-dynamic";
 export default function EmailsPage() {
   const samples = emailSamples().map((s) => {
     const built = s.build();
-    return { key: s.key, label: s.label, description: s.description, subject: built.subject, html: built.html };
+    return {
+      key: s.key,
+      label: s.label,
+      category: s.category,
+      description: s.description,
+      subject: built.subject,
+      html: built.html,
+    };
   });
 
   return (

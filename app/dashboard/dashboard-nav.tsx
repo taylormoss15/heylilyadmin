@@ -38,12 +38,19 @@ const SECTIONS: { href: string; label: string; hint: string; match: (p: string) 
   },
 ];
 
-export default function DashboardNav() {
+export default function DashboardNav({
+  launchpadPending = 0,
+  launchpadOverdue = 0,
+}: {
+  launchpadPending?: number;
+  launchpadOverdue?: number;
+}) {
   const pathname = usePathname();
   return (
     <nav className="w-44 shrink-0 space-y-1">
       {SECTIONS.map((s) => {
         const active = s.match(pathname);
+        const showBadge = s.href === "/dashboard/launchpad" && launchpadPending > 0;
         return (
           <Link
             key={s.href}
@@ -54,7 +61,19 @@ export default function DashboardNav() {
                 : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
             }`}
           >
-            {s.label}
+            <span className="flex items-center justify-between gap-2">
+              {s.label}
+              {showBadge && (
+                <span
+                  title={`${launchpadPending} paid, not live${launchpadOverdue ? ` · ${launchpadOverdue} overdue` : ""}`}
+                  className={`inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white ${
+                    launchpadOverdue > 0 ? "bg-red-600" : "bg-amber-500"
+                  }`}
+                >
+                  {launchpadPending}
+                </span>
+              )}
+            </span>
             <span className={`block text-[11px] font-normal ${active ? "text-slate-300" : "text-slate-400"}`}>
               {s.hint}
             </span>
