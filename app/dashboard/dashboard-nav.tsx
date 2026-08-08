@@ -30,6 +30,12 @@ const SECTIONS: { href: string; label: string; hint: string; match: (p: string) 
     hint: "Sent demos & opens",
     match: (p) => p.startsWith("/dashboard/demos"),
   },
+  {
+    href: "/dashboard/emails",
+    label: "Emails",
+    hint: "Preview & test templates",
+    match: (p) => p.startsWith("/dashboard/emails"),
+  },
 ];
 
 export default function DashboardNav() {

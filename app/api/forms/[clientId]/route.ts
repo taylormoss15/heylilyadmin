@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/integrations/email";
+import { contactFormEmail } from "@/lib/email/templates";
 import { getClientIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -19,10 +20,6 @@ const CORS_HEADERS = {
 
 export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
-}
-
-function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function str(v: unknown, max = 5000): string | null {
@@ -103,21 +100,8 @@ export async function POST(request: NextRequest, { params }: { params: { clientI
   // Email the client (best-effort — the submission is already saved).
   const to = client.notificationEmail?.trim();
   if (to) {
-    const rows = Object.entries(fields)
-      .map(([k, v]) => `<tr><td style="padding:4px 10px 4px 0;color:#555;vertical-align:top"><strong>${esc(k)}</strong></td><td style="padding:4px 0">${esc(v).replace(/\n/g, "<br>")}</td></tr>`)
-      .join("");
-    const html = `<div style="font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#111">
-<h2 style="margin:0 0 4px">New enquiry from your website</h2>
-<p style="margin:0 0 16px;color:#666">${esc(client.name)}${sourceUrl ? ` · ${esc(sourceUrl)}` : ""}</p>
-<table style="border-collapse:collapse">${rows}</table>
-<p style="margin:16px 0 0;color:#999;font-size:12px">Reply directly to this email to respond${email ? ` to ${esc(email)}` : ""}. Sent by Hey Lily.</p>
-</div>`;
-    const result = await sendEmail({
-      to,
-      subject: `New website enquiry${name ? ` from ${name}` : ""} — ${client.name}`,
-      html,
-      replyTo: email || undefined,
-    });
+    const built = contactFormEmail({ clientName: client.name, sourceUrl, fields, replyEmail: email });
+    const result = await sendEmail({ to, subject: built.subject, html: built.html, replyTo: email || undefined });
     if (result.sent) {
       await prisma.formSubmission.update({ where: { id: submission.id }, data: { emailed: true } });
     }

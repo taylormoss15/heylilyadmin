@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { computeImplementation, inputsFromClient, implementationInclude } from "@/lib/onboarding";
 import { sendEmail } from "@/lib/integrations/email";
+import { launchpadDigestEmail } from "@/lib/email/templates";
 
 export const dynamic = "force-dynamic";
 
@@ -41,47 +42,22 @@ async function run(request: NextRequest) {
     .map((c) => ({ name: c.name, id: c.id, paidAt: c.paidAt as Date, impl: computeImplementation(inputsFromClient(c)) }))
     .filter((r) => !r.impl.live);
 
-  const base = (process.env.ADMIN_BASE_URL || "https://admin.heylily.ai").replace(/\/$/, "");
+  const base = process.env.ADMIN_BASE_URL || "https://admin.heylily.ai";
+  const built = launchpadDigestEmail({
+    baseUrl: base,
+    pending: pending.map((r) => ({
+      name: r.name,
+      id: r.id,
+      days: daysSince(r.paidAt),
+      blockedAt: r.impl.blockedAt || "—",
+      doneCount: r.impl.doneCount,
+      total: r.impl.total,
+    })),
+  });
 
-  const rows = pending
-    .map((r) => {
-      const age = daysSince(r.paidAt);
-      const overdue = age >= 7;
-      const color = overdue ? "#b91c1c" : age >= 3 ? "#b45309" : "#475569";
-      return `<tr>
-        <td style="padding:8px 10px;border-bottom:1px solid #eef"><a href="${base}/dashboard/clients/${r.id}" style="color:#2f57b8;font-weight:600;text-decoration:none">${escapeHtml(r.name)}</a></td>
-        <td style="padding:8px 10px;border-bottom:1px solid #eef;color:${color};font-weight:600">${age === 0 ? "today" : `${age}d`}${overdue ? " · overdue" : ""}</td>
-        <td style="padding:8px 10px;border-bottom:1px solid #eef;color:#334155">${escapeHtml(r.impl.blockedAt || "—")}</td>
-        <td style="padding:8px 10px;border-bottom:1px solid #eef;color:#94a3b8">${r.impl.doneCount}/${r.impl.total}</td>
-      </tr>`;
-    })
-    .join("");
-
-  const subject = pending.length
-    ? `Launchpad — ${pending.length} paid account${pending.length === 1 ? "" : "s"} not live yet`
-    : "Launchpad — ✅ all paid accounts are live";
-
-  const html = pending.length
-    ? `<div style="font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#111">
-<h2 style="margin:0 0 4px">${pending.length} paid ${pending.length === 1 ? "account" : "accounts"} waiting to go live</h2>
-<p style="margin:0 0 16px;color:#666">Sorted by how long they've been paid. Get the overdue ones live first.</p>
-<table style="border-collapse:collapse;width:100%;max-width:560px">
-<thead><tr style="text-align:left;color:#64748b;font-size:12px;text-transform:uppercase">
-<th style="padding:6px 10px">Account</th><th style="padding:6px 10px">Paid</th><th style="padding:6px 10px">Blocked at</th><th style="padding:6px 10px">Steps</th></tr></thead>
-<tbody>${rows}</tbody></table>
-<p style="margin:18px 0 0"><a href="${base}/dashboard/launchpad" style="color:#2f57b8">Open the Launchpad →</a></p>
-</div>`
-    : `<div style="font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#111">
-<h2 style="margin:0 0 4px">✅ Every paid account is fully live</h2>
-<p style="color:#666">Nothing waiting today. <a href="${base}/dashboard/launchpad" style="color:#2f57b8">Launchpad →</a></p></div>`;
-
-  const result = await sendEmail({ to, subject, html });
+  const result = await sendEmail({ to, subject: built.subject, html: built.html });
 
   return NextResponse.json({ ok: true, pending: pending.length, emailed: result.sent, reason: result.reason });
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 export async function GET(request: NextRequest) {
