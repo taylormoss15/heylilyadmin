@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { convertProspect } from "@/lib/prospecting/convert";
 
 const bodySchema = z.object({
   name: z.string().min(1).optional(),
@@ -23,43 +24,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  let domain: string | undefined;
-  try {
-    domain = new URL(prospect.url).hostname.replace(/^www\./, "");
-  } catch {
-    domain = undefined;
-  }
-
-  const client = await prisma.client.create({
-    data: {
-      name: parsed.data.name || prospect.businessName || domain || prospect.url,
-      domain,
-      siteUrl: prospect.url,
-      tier: parsed.data.tier,
-      // Seed the audit trail with the prospect's scan so the "before" score
-      // shows up on day one — the same demo hook as importing a site.
-      accessibilityScans:
-        prospect.scanStatus === "COMPLETED"
-          ? {
-              create: {
-                url: prospect.url,
-                violationCount: prospect.violationCount,
-                seriousCount: prospect.seriousCount,
-                passCount: prospect.passCount,
-                score: prospect.score,
-                violations: prospect.violations ?? "[]",
-                status: "COMPLETED",
-                kind: "baseline", // the old site's "before" — kept off the live badge
-              },
-            }
-          : undefined,
-    },
+  const { clientId } = await convertProspect({
+    prospectId: prospect.id,
+    tier: parsed.data.tier,
+    name: parsed.data.name,
   });
 
-  await prisma.prospect.update({
-    where: { id: prospect.id },
-    data: { status: "CONVERTED", convertedClientId: client.id },
-  });
-
-  return NextResponse.json({ clientId: client.id }, { status: 201 });
+  return NextResponse.json({ clientId }, { status: 201 });
 }

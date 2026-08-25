@@ -103,8 +103,8 @@ export default async function ReportPage({ params }: { params: { token: string }
   const afterT = demo.afterTrust;
   const topIssues = issues.slice(0, 3);
   const unlocked = demo.unlocked;
-  const buyUrl = process.env.HEYLILY_BUY_URL || process.env.DEMO_CTA_URL || "https://heylily.ai";
-  const bookUrl = process.env.DEMO_CTA_URL || "https://heylily.ai";
+  const buyUrl = `/demo/${demo.token}/checkout`;
+  const bookUrl = process.env.CALENDLY_URL || process.env.DEMO_CTA_URL || "https://heylily.ai";
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
@@ -253,7 +253,7 @@ export default async function ReportPage({ params }: { params: { token: string }
                   <div className="text-sm text-slate-600">then $197/month · 12-month term</div>
                 </div>
                 <div className="mt-4 flex flex-col justify-center gap-2 sm:flex-row">
-                  <a href={buyUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-emerald-500 px-6 py-3 font-semibold text-white hover:bg-emerald-400">
+                  <a href={buyUrl} className="rounded-lg bg-emerald-500 px-6 py-3 font-semibold text-white hover:bg-emerald-400">
                     Buy now &amp; unlock the full report
                   </a>
                   <a href={bookUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-700 hover:bg-slate-50">
