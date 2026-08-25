@@ -4,7 +4,7 @@
 // it. The fix is the redesign we already built; we are the solution, not a
 // spec sheet for their developer.
 
-interface RawViolation {
+export interface RawViolation {
   id: string;
   impact: string | null;
   help: string;

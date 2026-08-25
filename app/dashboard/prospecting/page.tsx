@@ -87,6 +87,9 @@ export default async function ProspectingPage() {
     ownerName: p.ownerId ? repName.get(p.ownerId) ?? null : null,
     demoBooked: p.demoBookedAt != null,
     bookedWith: p.bookedWith,
+    emailed: p.emailedAt != null,
+    unsubscribed: p.unsubscribedAt != null,
+    hasEmail: Boolean(p.email || p.leadEmail),
   }));
 
   return (

@@ -57,6 +57,10 @@ model Prospect {
   demoBookedAt   DateTime?
   bookedWith     String? // the rep/host name the demo was booked with
 
+  // Cold outreach state.
+  emailedAt      DateTime? // when the outreach email was sent
+  unsubscribedAt DateTime? // suppresses all future sends
+
   // Site intelligence gathered in the same quick scan.
   platform           String? // detected builder/CMS (Wix, WordPress, GoDaddy, Squarespace…)
   builtBy            String? // "powered by / website by" credit found on the page
@@ -308,6 +312,7 @@ model AdminUser {
   name         String?
   role         String   @default("OWNER") // OWNER (full access) | SALES (own leads)
   calendlyUrl  String? // this rep's booking link, used for their demos
+  phone        String? // this rep's direct phone, shown in their outreach signature
   createdAt    DateTime @default(now())
 }
 

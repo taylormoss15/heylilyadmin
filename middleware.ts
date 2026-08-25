@@ -11,6 +11,8 @@ const PUBLIC_PATH_PREFIXES = [
   "/api/webhooks",
   "/api/compliance",
   "/api/forms", // contact-form relay POSTed by client sites (cross-origin)
+  "/u", // public one-click unsubscribe pages
+  "/api/unsubscribe", // unsubscribe endpoint (CAN-SPAM)
   "/api/cron", // scheduled jobs — protected by CRON_SECRET in the route itself
   "/api/assets", // locally-stored site images (R2 fallback), referenced by client sites
   "/widget", // client-embeddable badge script, served from /public/widget

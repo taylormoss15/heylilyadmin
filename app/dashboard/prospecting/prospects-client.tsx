@@ -76,6 +76,9 @@ export interface ProspectRow {
   ownerName: string | null;
   demoBooked: boolean;
   bookedWith: string | null;
+  emailed: boolean;
+  unsubscribed: boolean;
+  hasEmail: boolean;
 }
 
 type SortKey = "score" | "businessName" | "url" | "industry" | "estimatedRevenue" | "employees";
@@ -124,6 +127,50 @@ export default function ProspectsClient({
   const [ownerFilter, setOwnerFilter] = useState<"mine" | "unassigned" | "all">(
     currentUser && !currentUser.isOwner ? "mine" : "all"
   );
+
+  const [sending, setSending] = useState(false);
+  const [sendMsg, setSendMsg] = useState<string | null>(null);
+
+  function isReady(r: ProspectRow): boolean {
+    return (
+      !!r.demoToken &&
+      r.hasEmail &&
+      !r.emailed &&
+      !r.unsubscribed &&
+      r.status === "PROSPECT" &&
+      (currentUser?.isOwner ? true : r.ownerId === currentUser?.id)
+    );
+  }
+
+  async function sendOne(id: string): Promise<{ ok: boolean; reason?: string }> {
+    const res = await fetch(`/api/prospects/${id}/outreach`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    if (data.ok) {
+      patchRow(id, { emailed: true });
+      return { ok: true };
+    }
+    return { ok: false, reason: typeof data.reason === "string" ? data.reason : "Send failed" };
+  }
+
+  async function sendOutreachBulk() {
+    const ready = visible.filter(isReady);
+    if (ready.length === 0) return;
+    if (!confirm(`Send the outreach email to ${ready.length} ready lead${ready.length === 1 ? "" : "s"}?`)) return;
+    setSending(true);
+    setSendMsg(null);
+    let sent = 0;
+    let capped = false;
+    for (const r of ready) {
+      const res = await sendOne(r.id);
+      if (res.ok) sent++;
+      else if (res.reason && /daily send cap/i.test(res.reason)) {
+        capped = true;
+        break;
+      }
+    }
+    setSending(false);
+    setSendMsg(`Sent ${sent} email${sent === 1 ? "" : "s"}.${capped ? " Daily cap reached — the rest will send tomorrow." : ""}`);
+  }
 
   async function distribute() {
     if (!confirm("Assign all unassigned leads evenly across your sales reps?")) return;
@@ -348,12 +395,23 @@ export default function ProspectsClient({
           Show dismissed
         </label>
         <span className="text-xs text-slate-500">{visible.length} shown</span>
-        {currentUser?.isOwner && (
-          <button onClick={distribute} disabled={distributing} className="btn-secondary ml-auto text-sm">
-            {distributing ? "Distributing…" : "Distribute unassigned →"}
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          {currentUser?.isOwner && (
+            <button onClick={distribute} disabled={distributing} className="btn-secondary text-sm">
+              {distributing ? "Distributing…" : "Distribute unassigned →"}
+            </button>
+          )}
+          {(() => {
+            const readyCount = visible.filter(isReady).length;
+            return (
+              <button onClick={sendOutreachBulk} disabled={sending || readyCount === 0} className="btn text-sm">
+                {sending ? "Sending…" : `✉️ Send outreach (${readyCount})`}
+              </button>
+            );
+          })()}
+        </div>
       </div>
+      {sendMsg && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{sendMsg}</p>}
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full text-sm">
@@ -390,6 +448,7 @@ export default function ProspectsClient({
                   reps={reps}
                   currentUser={currentUser}
                   onAssign={(ownerId) => assign(r.id, ownerId)}
+                  onSendOutreach={() => sendOne(r.id)}
                 />
               );
             })}
@@ -428,6 +487,7 @@ function FragmentRow({
   reps,
   currentUser,
   onAssign,
+  onSendOutreach,
 }: {
   r: ProspectRow;
   risk: { label: string; cls: string };
@@ -444,6 +504,7 @@ function FragmentRow({
   reps: { id: string; name: string }[];
   currentUser: CurrentUser | null;
   onAssign: (ownerId: string | null) => void;
+  onSendOutreach: () => Promise<{ ok: boolean; reason?: string }>;
 }) {
   const [scanning, setScanning] = useState(false);
   const dimmed = r.status === "DISMISSED";
@@ -483,6 +544,15 @@ function FragmentRow({
               🔥 Demo booked{r.bookedWith ? ` · ${r.bookedWith}` : ""}
             </div>
           )}
+          {r.unsubscribed ? (
+            <div className="mt-0.5 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              Unsubscribed
+            </div>
+          ) : r.emailed ? (
+            <div className="mt-0.5 inline-block rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
+              ✉️ Emailed
+            </div>
+          ) : null}
           {r.ownerName && (
             <div className="mt-0.5 text-[11px] text-slate-400">
               {r.ownerId === currentUser?.id ? "Yours" : r.ownerName}
@@ -521,6 +591,7 @@ function FragmentRow({
               reps={reps}
               currentUser={currentUser}
               onAssign={onAssign}
+              onSendOutreach={onSendOutreach}
             />
           </td>
         </tr>
@@ -543,6 +614,7 @@ function DetailsPanel({
   reps,
   currentUser,
   onAssign,
+  onSendOutreach,
 }: {
   r: ProspectRow;
   scanning: boolean;
@@ -557,7 +629,10 @@ function DetailsPanel({
   reps: { id: string; name: string }[];
   currentUser: CurrentUser | null;
   onAssign: (ownerId: string | null) => void;
+  onSendOutreach: () => Promise<{ ok: boolean; reason?: string }>;
 }) {
+  const [outreachBusy, setOutreachBusy] = useState(false);
+  const [outreachMsg, setOutreachMsg] = useState<string | null>(null);
   const [fields, setFields] = useState({
     businessName: r.businessName ?? "",
     industry: r.industry ?? "",
@@ -681,7 +756,35 @@ function DetailsPanel({
 
         <DemoBlock prospectId={r.id} demoToken={r.demoToken} onGenerated={(t) => onPatch({ demoToken: t })} />
 
-        <button onClick={onConvert} className="btn w-full text-sm">Convert to account →</button>
+        {/* Outreach — the personalized cold email with this lead's real scores + issues. */}
+        <div className="rounded-lg border border-slate-200 bg-white p-3">
+          {r.unsubscribed ? (
+            <p className="text-xs text-slate-400">Unsubscribed — outreach is suppressed for this lead.</p>
+          ) : r.emailed ? (
+            <p className="text-xs text-blue-700">✉️ Outreach email sent.</p>
+          ) : !r.demoToken ? (
+            <p className="text-xs text-slate-400">Generate a demo first — the email links to the report.</p>
+          ) : !r.hasEmail ? (
+            <p className="text-xs text-amber-600">No contact email on this lead — add one to send outreach.</p>
+          ) : (
+            <button
+              onClick={async () => {
+                setOutreachBusy(true);
+                setOutreachMsg(null);
+                const res = await onSendOutreach();
+                setOutreachBusy(false);
+                if (!res.ok) setOutreachMsg(res.reason || "Send failed");
+              }}
+              disabled={outreachBusy}
+              className="btn w-full text-sm"
+            >
+              {outreachBusy ? "Sending…" : "✉️ Send outreach email"}
+            </button>
+          )}
+          {outreachMsg && <p className="mt-1.5 text-xs text-red-600">{outreachMsg}</p>}
+        </div>
+
+        <button onClick={onConvert} className="btn-secondary w-full text-sm">Convert to account →</button>
         <div className="flex gap-2">
           {r.status === "DISMISSED" ? (
             <button onClick={onRestore} className="btn-secondary flex-1 text-xs">Restore</button>
@@ -1014,6 +1117,9 @@ function toRow(p: {
   ownerName?: string | null;
   demoBooked?: boolean;
   bookedWith?: string | null;
+  emailed?: boolean;
+  unsubscribed?: boolean;
+  hasEmail?: boolean;
 }): ProspectRow {
   return {
     id: p.id,
@@ -1049,6 +1155,9 @@ function toRow(p: {
     ownerName: p.ownerName ?? null,
     demoBooked: p.demoBooked ?? false,
     bookedWith: p.bookedWith ?? null,
+    emailed: p.emailed ?? false,
+    unsubscribed: p.unsubscribed ?? false,
+    hasEmail: p.hasEmail ?? false,
   };
 }
 

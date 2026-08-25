@@ -13,6 +13,9 @@ export interface SendEmailInput {
   html: string;
   text?: string;
   replyTo?: string;
+  // Override the sender (name + address). Used for cold outreach so the email
+  // comes from a rep on the cold-sending domain, not the transactional one.
+  from?: string;
 }
 
 export interface SendEmailResult {
@@ -26,7 +29,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   if (!apiKey) return { sent: false, reason: "RESEND_API_KEY not configured" };
 
   // Must be an address on a domain you've verified in Resend.
-  const from = process.env.RESEND_FROM || "Hey Lily <notifications@heylily.ai>";
+  const from = input.from || process.env.RESEND_FROM || "Hey Lily <notifications@heylily.ai>";
 
   try {
     const res = await fetch("https://api.resend.com/emails", {
