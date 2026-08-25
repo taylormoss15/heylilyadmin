@@ -79,9 +79,69 @@ export interface ProspectRow {
   emailed: boolean;
   unsubscribed: boolean;
   hasEmail: boolean;
+  reviewStatus: string;
+  contactName: string | null;
+  contactEmail: string | null;
 }
 
 type SortKey = "score" | "businessName" | "url" | "industry" | "estimatedRevenue" | "employees";
+
+interface LeadRow {
+  url: string;
+  businessName?: string;
+  email?: string;
+  phone?: string;
+  name?: string;
+}
+
+// Parse a CSV lead list. Handles quoted fields and maps common header names to
+// our fields; the website/url column is required per row.
+function parseCsvLeads(text: string): LeadRow[] {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n").filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return [];
+
+  const splitRow = (line: string): string[] => {
+    const out: string[] = [];
+    let cur = "";
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (inQ) {
+        if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+        else if (c === '"') inQ = false;
+        else cur += c;
+      } else if (c === '"') inQ = true;
+      else if (c === ",") { out.push(cur); cur = ""; }
+      else cur += c;
+    }
+    out.push(cur);
+    return out.map((s) => s.trim());
+  };
+
+  const headers = splitRow(lines[0]).map((h) => h.toLowerCase().replace(/[^a-z]/g, ""));
+  const find = (...cands: string[]) => headers.findIndex((h) => cands.some((c) => h.includes(c)));
+  const iUrl = find("website", "url", "domain", "site");
+  const iBiz = find("business", "company", "firm", "practice", "organization");
+  const iEmail = find("email");
+  const iPhone = find("phone", "tel", "mobile");
+  const iName = find("firstname", "contact", "name");
+  if (iUrl < 0) return [];
+
+  const rows: LeadRow[] = [];
+  for (let r = 1; r < lines.length; r++) {
+    const cols = splitRow(lines[r]);
+    const url = (cols[iUrl] || "").trim();
+    if (!url) continue;
+    rows.push({
+      url,
+      businessName: iBiz >= 0 ? cols[iBiz] : undefined,
+      email: iEmail >= 0 ? cols[iEmail] : undefined,
+      phone: iPhone >= 0 ? cols[iPhone] : undefined,
+      name: iName >= 0 ? cols[iName] : undefined,
+    });
+  }
+  return rows;
+}
 
 function hostOf(url: string): string {
   try {
@@ -130,16 +190,57 @@ export default function ProspectsClient({
 
   const [sending, setSending] = useState(false);
   const [sendMsg, setSendMsg] = useState<string | null>(null);
+  const [reviewOnly, setReviewOnly] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+
+  async function importCsv(file: File) {
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const text = await file.text();
+      const rowsParsed = parseCsvLeads(text);
+      if (rowsParsed.length === 0) {
+        setImportMsg("No rows found. Include a header row with a website/url column.");
+        return;
+      }
+      const res = await fetch("/api/prospects/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: rowsParsed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setImportMsg(typeof data.error === "string" ? data.error : "Import failed.");
+        return;
+      }
+      setImportMsg(`Imported ${data.created} new, updated ${data.updated}${data.skipped ? `, skipped ${data.skipped}` : ""}. Refreshing…`);
+      router.refresh();
+    } finally {
+      setImporting(false);
+    }
+  }
 
   function isReady(r: ProspectRow): boolean {
     return (
       !!r.demoToken &&
       r.hasEmail &&
+      !!r.ownerId &&
+      r.reviewStatus === "APPROVED" &&
       !r.emailed &&
       !r.unsubscribed &&
       r.status === "PROSPECT" &&
       (currentUser?.isOwner ? true : r.ownerId === currentUser?.id)
     );
+  }
+
+  async function review(id: string, status: "APPROVED" | "REJECTED" | "PENDING") {
+    patchRow(id, { reviewStatus: status });
+    await fetch(`/api/prospects/${id}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    }).catch(() => {});
   }
 
   async function sendOne(id: string): Promise<{ ok: boolean; reason?: string }> {
@@ -292,6 +393,7 @@ export default function ProspectsClient({
       if (ownerFilter === "mine" && r.ownerId !== currentUser?.id) return false;
       if (ownerFilter === "unassigned" && r.ownerId) return false;
       if (bookedOnly && !r.demoBooked) return false;
+      if (reviewOnly && !(r.demoToken && r.reviewStatus === "PENDING" && !r.emailed)) return false;
       if (q && !`${r.businessName ?? ""} ${r.url} ${r.industry ?? ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -308,7 +410,7 @@ export default function ProspectsClient({
       const bv = (b[sortKey] ?? "").toString().toLowerCase();
       return av.localeCompare(bv) * dir;
     });
-  }, [rows, query, showDismissed, sortKey, sortDir, ownerFilter, bookedOnly, currentUser?.id]);
+  }, [rows, query, showDismissed, sortKey, sortDir, ownerFilter, bookedOnly, reviewOnly, currentUser?.id]);
 
   const pendingCount = rows.filter((r) => r.status === "PROSPECT" && r.scanStatus !== "COMPLETED").length;
 
@@ -387,8 +489,22 @@ export default function ProspectsClient({
           </div>
         )}
         <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" checked={reviewOnly} onChange={(e) => setReviewOnly(e.target.checked)} />
+          🕵️ To review
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
           <input type="checkbox" checked={bookedOnly} onChange={(e) => setBookedOnly(e.target.checked)} />
           🔥 Booked only
+        </label>
+        <label className="btn-secondary cursor-pointer text-sm">
+          {importing ? "Importing…" : "Upload CSV"}
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            disabled={importing}
+            onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])}
+          />
         </label>
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input type="checkbox" checked={showDismissed} onChange={(e) => setShowDismissed(e.target.checked)} />
@@ -412,6 +528,7 @@ export default function ProspectsClient({
         </div>
       </div>
       {sendMsg && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{sendMsg}</p>}
+      {importMsg && <p className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">{importMsg}</p>}
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full text-sm">
@@ -449,6 +566,7 @@ export default function ProspectsClient({
                   currentUser={currentUser}
                   onAssign={(ownerId) => assign(r.id, ownerId)}
                   onSendOutreach={() => sendOne(r.id)}
+                  onReview={(status) => review(r.id, status)}
                 />
               );
             })}
@@ -488,6 +606,7 @@ function FragmentRow({
   currentUser,
   onAssign,
   onSendOutreach,
+  onReview,
 }: {
   r: ProspectRow;
   risk: { label: string; cls: string };
@@ -505,6 +624,7 @@ function FragmentRow({
   currentUser: CurrentUser | null;
   onAssign: (ownerId: string | null) => void;
   onSendOutreach: () => Promise<{ ok: boolean; reason?: string }>;
+  onReview: (status: "APPROVED" | "REJECTED" | "PENDING") => void;
 }) {
   const [scanning, setScanning] = useState(false);
   const dimmed = r.status === "DISMISSED";
@@ -592,6 +712,7 @@ function FragmentRow({
               currentUser={currentUser}
               onAssign={onAssign}
               onSendOutreach={onSendOutreach}
+              onReview={onReview}
             />
           </td>
         </tr>
@@ -615,6 +736,7 @@ function DetailsPanel({
   currentUser,
   onAssign,
   onSendOutreach,
+  onReview,
 }: {
   r: ProspectRow;
   scanning: boolean;
@@ -630,6 +752,7 @@ function DetailsPanel({
   currentUser: CurrentUser | null;
   onAssign: (ownerId: string | null) => void;
   onSendOutreach: () => Promise<{ ok: boolean; reason?: string }>;
+  onReview: (status: "APPROVED" | "REJECTED" | "PENDING") => void;
 }) {
   const [outreachBusy, setOutreachBusy] = useState(false);
   const [outreachMsg, setOutreachMsg] = useState<string | null>(null);
@@ -756,32 +879,61 @@ function DetailsPanel({
 
         <DemoBlock prospectId={r.id} demoToken={r.demoToken} onGenerated={(t) => onPatch({ demoToken: t })} />
 
-        {/* Outreach — the personalized cold email with this lead's real scores + issues. */}
-        <div className="rounded-lg border border-slate-200 bg-white p-3">
+        {/* Outreach — review the preview, approve/reject, then it joins the send queue. */}
+        <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Outreach</div>
           {r.unsubscribed ? (
             <p className="text-xs text-slate-400">Unsubscribed — outreach is suppressed for this lead.</p>
           ) : r.emailed ? (
             <p className="text-xs text-blue-700">✉️ Outreach email sent.</p>
           ) : !r.demoToken ? (
-            <p className="text-xs text-slate-400">Generate a demo first — the email links to the report.</p>
-          ) : !r.hasEmail ? (
-            <p className="text-xs text-amber-600">No contact email on this lead — add one to send outreach.</p>
+            <p className="text-xs text-slate-400">Generate a demo above first — reps review the preview before it can be sent.</p>
           ) : (
-            <button
-              onClick={async () => {
-                setOutreachBusy(true);
-                setOutreachMsg(null);
-                const res = await onSendOutreach();
-                setOutreachBusy(false);
-                if (!res.ok) setOutreachMsg(res.reason || "Send failed");
-              }}
-              disabled={outreachBusy}
-              className="btn w-full text-sm"
-            >
-              {outreachBusy ? "Sending…" : "✉️ Send outreach email"}
-            </button>
+            <>
+              <a
+                href={`/demo/${r.demoToken}/report`}
+                target="_blank"
+                rel="noreferrer"
+                className="block text-xs text-brand-600 hover:underline"
+              >
+                Open the preview to review →
+              </a>
+              {r.reviewStatus === "APPROVED" ? (
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700">✓ Approved — queued</span>
+                  <button onClick={() => onReview("PENDING")} className="text-[11px] text-slate-400 hover:text-slate-600">Undo</button>
+                </div>
+              ) : r.reviewStatus === "REJECTED" ? (
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">Rejected</span>
+                  <button onClick={() => onReview("PENDING")} className="text-[11px] text-brand-600 hover:underline">Re-review</button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button onClick={() => onReview("APPROVED")} className="btn flex-1 text-xs">Approve &amp; queue</button>
+                  <button onClick={() => onReview("REJECTED")} className="btn-secondary flex-1 text-xs">Reject</button>
+                </div>
+              )}
+              {!r.hasEmail && <p className="text-[11px] text-amber-600">No contact email — add one before this can send.</p>}
+              {!r.ownerId && <p className="text-[11px] text-amber-600">Assign to a rep before sending.</p>}
+              {r.reviewStatus === "APPROVED" && r.hasEmail && r.ownerId && (
+                <button
+                  onClick={async () => {
+                    setOutreachBusy(true);
+                    setOutreachMsg(null);
+                    const res = await onSendOutreach();
+                    setOutreachBusy(false);
+                    if (!res.ok) setOutreachMsg(res.reason || "Send failed");
+                  }}
+                  disabled={outreachBusy}
+                  className="btn-secondary w-full text-xs"
+                >
+                  {outreachBusy ? "Sending…" : "✉️ Send now"}
+                </button>
+              )}
+            </>
           )}
-          {outreachMsg && <p className="mt-1.5 text-xs text-red-600">{outreachMsg}</p>}
+          {outreachMsg && <p className="text-xs text-red-600">{outreachMsg}</p>}
         </div>
 
         <button onClick={onConvert} className="btn-secondary w-full text-sm">Convert to account →</button>
@@ -1120,6 +1272,9 @@ function toRow(p: {
   emailed?: boolean;
   unsubscribed?: boolean;
   hasEmail?: boolean;
+  reviewStatus?: string;
+  contactName?: string | null;
+  contactEmail?: string | null;
 }): ProspectRow {
   return {
     id: p.id,
@@ -1158,6 +1313,9 @@ function toRow(p: {
     emailed: p.emailed ?? false,
     unsubscribed: p.unsubscribed ?? false,
     hasEmail: p.hasEmail ?? false,
+    reviewStatus: p.reviewStatus ?? "PENDING",
+    contactName: p.contactName ?? null,
+    contactEmail: p.contactEmail ?? null,
   };
 }
 

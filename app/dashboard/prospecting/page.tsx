@@ -90,6 +90,9 @@ export default async function ProspectingPage() {
     emailed: p.emailedAt != null,
     unsubscribed: p.unsubscribedAt != null,
     hasEmail: Boolean(p.email || p.leadEmail),
+    reviewStatus: p.reviewStatus,
+    contactName: p.leadName,
+    contactEmail: p.email || p.leadEmail,
   }));
 
   return (

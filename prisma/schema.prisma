@@ -58,6 +58,7 @@ model Prospect {
   bookedWith     String? // the rep/host name the demo was booked with
 
   // Cold outreach state.
+  reviewStatus   String    @default("PENDING") // PENDING | APPROVED | REJECTED — the rep gate before sending
   emailedAt      DateTime? // when the outreach email was sent
   unsubscribedAt DateTime? // suppresses all future sends
 

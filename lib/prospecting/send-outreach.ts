@@ -33,6 +33,8 @@ export async function sendOutreach(prospectId: string, opts: { force?: boolean }
   if (!prospect) return { sent: false, reason: "Not found" };
 
   if (!prospect.demoToken) return { sent: false, reason: "No demo/report to link — generate a demo first" };
+  if (prospect.reviewStatus !== "APPROVED") return { sent: false, reason: "Not approved for outreach" };
+  if (!prospect.ownerId) return { sent: false, reason: "Assign to a rep first" };
   if (prospect.unsubscribedAt) return { sent: false, reason: "Unsubscribed" };
   if (prospect.emailedAt && !opts.force) return { sent: false, reason: "Already emailed" };
 
