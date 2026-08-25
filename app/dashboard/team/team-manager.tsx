@@ -9,13 +9,14 @@ interface User {
   name: string | null;
   role: string;
   calendlyUrl: string | null;
+  phone: string | null;
   isMe: boolean;
 }
 
 export default function TeamManager({ users }: { users: User[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "SALES", calendlyUrl: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "SALES", calendlyUrl: "", phone: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +35,7 @@ export default function TeamManager({ users }: { users: User[] }) {
       setError(typeof data.error === "string" ? data.error : "Could not create the user.");
       return;
     }
-    setForm({ name: "", email: "", password: "", role: "SALES", calendlyUrl: "" });
+    setForm({ name: "", email: "", password: "", role: "SALES", calendlyUrl: "", phone: "" });
     setOpen(false);
     router.refresh();
   }
@@ -50,6 +51,7 @@ export default function TeamManager({ users }: { users: User[] }) {
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-3">Phone</th>
               <th className="px-4 py-3">Calendly</th>
             </tr>
           </thead>
@@ -65,6 +67,7 @@ export default function TeamManager({ users }: { users: User[] }) {
                     {u.role === "OWNER" ? "Owner" : "Sales"}
                   </span>
                 </td>
+                <td className="px-4 py-3 text-slate-500">{u.phone || "—"}</td>
                 <td className="px-4 py-3 text-slate-500">
                   {u.calendlyUrl ? <span className="text-emerald-600">✓ set</span> : "—"}
                 </td>
@@ -85,7 +88,8 @@ export default function TeamManager({ users }: { users: User[] }) {
               <option value="SALES">Sales rep</option>
               <option value="OWNER">Owner (full access)</option>
             </select>
-            <input className="input sm:col-span-2" placeholder="Calendly link (optional)" value={form.calendlyUrl} onChange={(e) => set("calendlyUrl", e.target.value)} />
+            <input className="input" placeholder="Direct phone (shown in outreach signature)" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+            <input className="input" placeholder="Calendly link (optional)" value={form.calendlyUrl} onChange={(e) => set("calendlyUrl", e.target.value)} />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2">

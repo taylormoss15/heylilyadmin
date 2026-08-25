@@ -10,6 +10,7 @@ const createSchema = z.object({
   password: z.string().min(8),
   role: z.enum(["OWNER", "SALES"]).default("SALES"),
   calendlyUrl: z.string().url().optional().or(z.literal("")),
+  phone: z.string().max(40).optional().or(z.literal("")),
 });
 
 // Create a teammate (sales rep or another owner). Owner-only.
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
       name: parsed.data.name,
       role: parsed.data.role,
       calendlyUrl: parsed.data.calendlyUrl || null,
+      phone: parsed.data.phone || null,
       passwordHash: await bcrypt.hash(parsed.data.password, 12),
     },
   });
