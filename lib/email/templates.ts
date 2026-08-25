@@ -88,6 +88,24 @@ export function launchpadDigestEmail(input: { pending: DigestRow[]; baseUrl: str
   };
 }
 
+// ---- 4. New sale → the ops/owner inbox ----
+export function newSaleEmail(input: { clientName: string; baseUrl: string; clientId: string }): BuiltEmail {
+  const base = input.baseUrl.replace(/\/$/, "");
+  const content = `
+    <h1 style="margin:0 0 6px;font-size:22px">🎉 New sale — ${esc(input.clientName)}</h1>
+    <p style="margin:0 0 16px;color:${T.MUTED};font-size:15px">A new account just went paid. Get them live fast — the clock's running.</p>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px 16px;margin:0 0 18px">
+      <div style="font-size:15px;color:${T.INK}"><strong>$1,000</strong> setup &nbsp;+&nbsp; <strong>$197/mo</strong> · 12-month term</div>
+    </div>
+    <p style="margin:0 0 6px">${emailButton("Open the account & start the go-live checklist", `${base}/dashboard/clients/${input.clientId}`, "#059669")}</p>
+    <p style="margin:12px 0 0;font-size:14px"><a href="${base}/dashboard/launchpad" style="color:${T.BRAND}">See the Launchpad →</a></p>`;
+
+  return {
+    subject: `🎉 New sale — ${input.clientName}`,
+    html: emailLayout({ preheader: `${input.clientName} just signed up.`, contentHtml: content }),
+  };
+}
+
 // ---- 3. Cold outreach → a prospect (Chunk C) ----
 export function coldOutreachEmail(input: {
   businessName: string;

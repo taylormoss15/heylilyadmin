@@ -1,4 +1,4 @@
-import { contactFormEmail, launchpadDigestEmail, coldOutreachEmail, type BuiltEmail } from "@/lib/email/templates";
+import { contactFormEmail, launchpadDigestEmail, coldOutreachEmail, newSaleEmail, type BuiltEmail } from "@/lib/email/templates";
 
 // One place that renders every email with realistic sample data, so the
 // preview page and the "send test" both use the same thing. Add a template
@@ -48,6 +48,13 @@ export function emailSamples(): EmailSample[] {
             { name: "Ray's Auto Body", id: "sample3", days: 1, blockedAt: "Website built", doneCount: 1, total: 5 },
           ],
         }),
+    },
+    {
+      key: "new-sale",
+      label: "New sale alert",
+      category: "Hey Lily Admin",
+      description: "Emailed to you the moment an account goes paid.",
+      build: () => newSaleEmail({ clientName: "Hamilton Law Office", baseUrl: base, clientId: "sample" }),
     },
     {
       key: "cold-outreach",
