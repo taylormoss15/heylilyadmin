@@ -53,6 +53,10 @@ model Prospect {
 
   ownerId        String? // the sales rep (AdminUser) this lead is assigned to
 
+  // Hot-lead signal from Calendly: when a prospect books a demo (and who with).
+  demoBookedAt   DateTime?
+  bookedWith     String? // the rep/host name the demo was booked with
+
   // Site intelligence gathered in the same quick scan.
   platform           String? // detected builder/CMS (Wix, WordPress, GoDaddy, Squarespace…)
   builtBy            String? // "powered by / website by" credit found on the page

@@ -85,6 +85,8 @@ export default async function ProspectingPage() {
     trustBreakdown: p.trustBreakdown,
     ownerId: p.ownerId,
     ownerName: p.ownerId ? repName.get(p.ownerId) ?? null : null,
+    demoBooked: p.demoBookedAt != null,
+    bookedWith: p.bookedWith,
   }));
 
   return (

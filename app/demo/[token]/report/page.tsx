@@ -104,7 +104,12 @@ export default async function ReportPage({ params }: { params: { token: string }
   const topIssues = issues.slice(0, 3);
   const unlocked = demo.unlocked;
   const buyUrl = `/demo/${demo.token}/checkout`;
-  const bookUrl = process.env.CALENDLY_URL || process.env.DEMO_CTA_URL || "https://heylily.ai";
+  const bookBase = process.env.CALENDLY_URL || process.env.DEMO_CTA_URL || "https://heylily.ai";
+  // Tag the Calendly link with the prospect id so a booking maps back to this
+  // lead (Calendly returns it as tracking.utm_content on the webhook).
+  const bookUrl = demo.prospectId
+    ? `${bookBase}${bookBase.includes("?") ? "&" : "?"}utm_content=${encodeURIComponent(demo.prospectId)}`
+    : bookBase;
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">

@@ -15,7 +15,7 @@ const SECTIONS: { href: string; label: string; hint: string; ownerOnly?: boolean
   {
     href: "/dashboard/prospecting",
     label: "Prospecting",
-    hint: "Score & convert leads",
+    hint: "Find & work your deals",
     match: (p) => p.startsWith("/dashboard/prospecting"),
   },
   {
@@ -31,17 +31,12 @@ const SECTIONS: { href: string; label: string; hint: string; ownerOnly?: boolean
     match: (p) => p.startsWith("/dashboard/demos"),
   },
   {
-    href: "/dashboard/emails",
-    label: "Emails",
-    hint: "Preview & test templates",
-    match: (p) => p.startsWith("/dashboard/emails"),
-  },
-  {
-    href: "/dashboard/team",
-    label: "Team",
-    hint: "Reps & lead access",
+    href: "/dashboard/settings",
+    label: "Settings",
+    hint: "Team & system emails",
     ownerOnly: true,
-    match: (p) => p.startsWith("/dashboard/team"),
+    match: (p) =>
+      p.startsWith("/dashboard/settings") || p.startsWith("/dashboard/team") || p.startsWith("/dashboard/emails"),
   },
 ];
 

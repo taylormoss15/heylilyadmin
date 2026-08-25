@@ -74,6 +74,8 @@ export interface ProspectRow {
   trustBreakdown: string | null;
   ownerId: string | null;
   ownerName: string | null;
+  demoBooked: boolean;
+  bookedWith: string | null;
 }
 
 type SortKey = "score" | "businessName" | "url" | "industry" | "estimatedRevenue" | "employees";
@@ -116,10 +118,22 @@ export default function ProspectsClient({
 
   const [query, setQuery] = useState("");
   const [showDismissed, setShowDismissed] = useState(false);
+  const [bookedOnly, setBookedOnly] = useState(false);
+  const [distributing, setDistributing] = useState(false);
   // Reps land on their own leads; owners see everything.
   const [ownerFilter, setOwnerFilter] = useState<"mine" | "unassigned" | "all">(
     currentUser && !currentUser.isOwner ? "mine" : "all"
   );
+
+  async function distribute() {
+    if (!confirm("Assign all unassigned leads evenly across your sales reps?")) return;
+    setDistributing(true);
+    const res = await fetch("/api/prospects/distribute", { method: "POST" });
+    setDistributing(false);
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) router.refresh();
+    else alert(typeof data.error === "string" ? data.error : "Could not distribute leads.");
+  }
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -230,6 +244,7 @@ export default function ProspectsClient({
       if (r.status === "DISMISSED" && !showDismissed) return false;
       if (ownerFilter === "mine" && r.ownerId !== currentUser?.id) return false;
       if (ownerFilter === "unassigned" && r.ownerId) return false;
+      if (bookedOnly && !r.demoBooked) return false;
       if (q && !`${r.businessName ?? ""} ${r.url} ${r.industry ?? ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -246,7 +261,7 @@ export default function ProspectsClient({
       const bv = (b[sortKey] ?? "").toString().toLowerCase();
       return av.localeCompare(bv) * dir;
     });
-  }, [rows, query, showDismissed, sortKey, sortDir, ownerFilter, currentUser?.id]);
+  }, [rows, query, showDismissed, sortKey, sortDir, ownerFilter, bookedOnly, currentUser?.id]);
 
   const pendingCount = rows.filter((r) => r.status === "PROSPECT" && r.scanStatus !== "COMPLETED").length;
 
@@ -325,10 +340,19 @@ export default function ProspectsClient({
           </div>
         )}
         <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" checked={bookedOnly} onChange={(e) => setBookedOnly(e.target.checked)} />
+          🔥 Booked only
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
           <input type="checkbox" checked={showDismissed} onChange={(e) => setShowDismissed(e.target.checked)} />
           Show dismissed
         </label>
         <span className="text-xs text-slate-500">{visible.length} shown</span>
+        {currentUser?.isOwner && (
+          <button onClick={distribute} disabled={distributing} className="btn-secondary ml-auto text-sm">
+            {distributing ? "Distributing…" : "Distribute unassigned →"}
+          </button>
+        )}
       </div>
 
       <div className="card overflow-x-auto p-0">
@@ -452,6 +476,11 @@ function FragmentRow({
           {r.source === "inbound" && (
             <div className="mt-0.5 inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
               Inbound lead{r.leadEmail ? " ✓" : ""}
+            </div>
+          )}
+          {r.demoBooked && (
+            <div className="mt-0.5 inline-block rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-700">
+              🔥 Demo booked{r.bookedWith ? ` · ${r.bookedWith}` : ""}
             </div>
           )}
           {r.ownerName && (
@@ -983,6 +1012,8 @@ function toRow(p: {
   trustBreakdown?: string | null;
   ownerId?: string | null;
   ownerName?: string | null;
+  demoBooked?: boolean;
+  bookedWith?: string | null;
 }): ProspectRow {
   return {
     id: p.id,
@@ -1016,6 +1047,8 @@ function toRow(p: {
     trustBreakdown: p.trustBreakdown ?? null,
     ownerId: p.ownerId ?? null,
     ownerName: p.ownerName ?? null,
+    demoBooked: p.demoBooked ?? false,
+    bookedWith: p.bookedWith ?? null,
   };
 }
 

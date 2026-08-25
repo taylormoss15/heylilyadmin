@@ -1,10 +1,16 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser, isOwner } from "@/lib/current-user";
 import ClientsTable, { type ClientRow } from "./clients-table";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  // Sales reps live in Prospecting — send them straight there.
+  const me = await getCurrentUser();
+  if (me && !isOwner(me)) redirect("/dashboard/prospecting");
+
   const clients = await prisma.client.findMany({
     orderBy: { createdAt: "desc" },
     include: {
