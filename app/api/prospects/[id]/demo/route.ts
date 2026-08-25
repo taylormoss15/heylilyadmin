@@ -89,6 +89,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     data: {
       token,
       prospectId: prospect.id,
+      ownerId: prospect.ownerId,
       sourceUrl: prospect.url,
       businessName: prospect.businessName || imported.content.businessName,
       beforeScore: imported.scan.score,

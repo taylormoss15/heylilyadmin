@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { AeoCheck } from "@/lib/prospecting/aeo";
+import { getCurrentUser, isOwner } from "@/lib/current-user";
 import ProspectsClient, { type ProspectRow, type Issue } from "./prospects-client";
 
 export const dynamic = "force-dynamic";
@@ -31,11 +32,17 @@ function parseIssues(json: string | null): Issue[] {
 }
 
 export default async function ProspectingPage() {
+  const me = await getCurrentUser();
+  const owner = isOwner(me);
+
   // Converted prospects fall off the board — they live in Accounts now.
   const prospects = await prisma.prospect.findMany({
     where: { status: { not: "CONVERTED" } },
     orderBy: [{ trustScore: "asc" }, { createdAt: "desc" }],
   });
+
+  const reps = await prisma.adminUser.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, email: true } });
+  const repName = new Map(reps.map((r) => [r.id, r.name || r.email]));
 
   // Prevalence across everything we've scanned, for the "seen on N of M sites"
   // expert talking point in the details drawer.
@@ -76,7 +83,17 @@ export default async function ProspectingPage() {
     leadName: p.leadName,
     trustScore: p.trustScore,
     trustBreakdown: p.trustBreakdown,
+    ownerId: p.ownerId,
+    ownerName: p.ownerId ? repName.get(p.ownerId) ?? null : null,
   }));
 
-  return <ProspectsClient initial={rows} prevalence={prevalence} totalScanned={scanned.length} />;
+  return (
+    <ProspectsClient
+      initial={rows}
+      prevalence={prevalence}
+      totalScanned={scanned.length}
+      currentUser={me ? { id: me.id, name: me.name || me.email, isOwner: owner } : null}
+      reps={reps.map((r) => ({ id: r.id, name: r.name || r.email }))}
+    />
+  );
 }

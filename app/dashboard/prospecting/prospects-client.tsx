@@ -72,6 +72,8 @@ export interface ProspectRow {
   leadName: string | null;
   trustScore: number | null;
   trustBreakdown: string | null;
+  ownerId: string | null;
+  ownerName: string | null;
 }
 
 type SortKey = "score" | "businessName" | "url" | "industry" | "estimatedRevenue" | "employees";
@@ -84,14 +86,24 @@ function hostOf(url: string): string {
   }
 }
 
+export interface CurrentUser {
+  id: string;
+  name: string;
+  isOwner: boolean;
+}
+
 export default function ProspectsClient({
   initial,
   prevalence,
   totalScanned,
+  currentUser,
+  reps,
 }: {
   initial: ProspectRow[];
   prevalence: Record<string, number>;
   totalScanned: number;
+  currentUser: CurrentUser | null;
+  reps: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<ProspectRow[]>(initial);
@@ -104,9 +116,23 @@ export default function ProspectsClient({
 
   const [query, setQuery] = useState("");
   const [showDismissed, setShowDismissed] = useState(false);
+  // Reps land on their own leads; owners see everything.
+  const [ownerFilter, setOwnerFilter] = useState<"mine" | "unassigned" | "all">(
+    currentUser && !currentUser.isOwner ? "mine" : "all"
+  );
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  async function assign(id: string, ownerId: string | null) {
+    const ownerName = ownerId ? reps.find((r) => r.id === ownerId)?.name ?? null : null;
+    patchRow(id, { ownerId, ownerName });
+    await fetch(`/api/prospects/${id}/assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ownerId }),
+    }).catch(() => {});
+  }
 
   function patchRow(id: string, patch: Partial<ProspectRow>) {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -202,6 +228,8 @@ export default function ProspectsClient({
     const q = query.trim().toLowerCase();
     const filtered = rows.filter((r) => {
       if (r.status === "DISMISSED" && !showDismissed) return false;
+      if (ownerFilter === "mine" && r.ownerId !== currentUser?.id) return false;
+      if (ownerFilter === "unassigned" && r.ownerId) return false;
       if (q && !`${r.businessName ?? ""} ${r.url} ${r.industry ?? ""}`.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -218,7 +246,7 @@ export default function ProspectsClient({
       const bv = (b[sortKey] ?? "").toString().toLowerCase();
       return av.localeCompare(bv) * dir;
     });
-  }, [rows, query, showDismissed, sortKey, sortDir]);
+  }, [rows, query, showDismissed, sortKey, sortDir, ownerFilter, currentUser?.id]);
 
   const pendingCount = rows.filter((r) => r.status === "PROSPECT" && r.scanStatus !== "COMPLETED").length;
 
@@ -279,6 +307,23 @@ export default function ProspectsClient({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        {currentUser && (
+          <div className="flex rounded-lg border border-slate-300 p-0.5 text-sm">
+            {([
+              ["mine", "My leads"],
+              ["unassigned", "Unassigned"],
+              ["all", "All"],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setOwnerFilter(key)}
+                className={`rounded-md px-2.5 py-1 ${ownerFilter === key ? "bg-slate-800 text-white" : "text-slate-600"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input type="checkbox" checked={showDismissed} onChange={(e) => setShowDismissed(e.target.checked)} />
           Show dismissed
@@ -318,6 +363,9 @@ export default function ProspectsClient({
                   onPatch={(patch) => patchRow(r.id, patch)}
                   prevalence={prevalence}
                   totalScanned={totalScanned}
+                  reps={reps}
+                  currentUser={currentUser}
+                  onAssign={(ownerId) => assign(r.id, ownerId)}
                 />
               );
             })}
@@ -353,6 +401,9 @@ function FragmentRow({
   onPatch,
   prevalence,
   totalScanned,
+  reps,
+  currentUser,
+  onAssign,
 }: {
   r: ProspectRow;
   risk: { label: string; cls: string };
@@ -366,6 +417,9 @@ function FragmentRow({
   onPatch: (patch: Partial<ProspectRow>) => void;
   prevalence: Record<string, number>;
   totalScanned: number;
+  reps: { id: string; name: string }[];
+  currentUser: CurrentUser | null;
+  onAssign: (ownerId: string | null) => void;
 }) {
   const [scanning, setScanning] = useState(false);
   const dimmed = r.status === "DISMISSED";
@@ -400,6 +454,11 @@ function FragmentRow({
               Inbound lead{r.leadEmail ? " ✓" : ""}
             </div>
           )}
+          {r.ownerName && (
+            <div className="mt-0.5 text-[11px] text-slate-400">
+              {r.ownerId === currentUser?.id ? "Yours" : r.ownerName}
+            </div>
+          )}
         </td>
         <td className="px-4 py-3">
           <a href={r.url} target="_blank" rel="noreferrer" className="text-slate-600 hover:underline">
@@ -430,6 +489,9 @@ function FragmentRow({
               onPatch={onPatch}
               prevalence={prevalence}
               totalScanned={totalScanned}
+              reps={reps}
+              currentUser={currentUser}
+              onAssign={onAssign}
             />
           </td>
         </tr>
@@ -449,6 +511,9 @@ function DetailsPanel({
   onPatch,
   prevalence,
   totalScanned,
+  reps,
+  currentUser,
+  onAssign,
 }: {
   r: ProspectRow;
   scanning: boolean;
@@ -460,6 +525,9 @@ function DetailsPanel({
   onPatch: (patch: Partial<ProspectRow>) => void;
   prevalence: Record<string, number>;
   totalScanned: number;
+  reps: { id: string; name: string }[];
+  currentUser: CurrentUser | null;
+  onAssign: (ownerId: string | null) => void;
 }) {
   const [fields, setFields] = useState({
     businessName: r.businessName ?? "",
@@ -495,6 +563,32 @@ function DetailsPanel({
 
   return (
     <div className="space-y-4">
+    {currentUser && (
+      <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2.5 text-sm">
+        <span className="text-slate-500">Assigned to</span>
+        {currentUser.isOwner ? (
+          <select
+            className="input h-8 py-0 text-sm"
+            value={r.ownerId ?? ""}
+            onChange={(e) => onAssign(e.target.value || null)}
+          >
+            <option value="">Unassigned</option>
+            {reps.map((rep) => (
+              <option key={rep.id} value={rep.id}>{rep.name}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="font-medium text-slate-800">
+            {r.ownerId === currentUser.id ? "You" : r.ownerName || "Unassigned"}
+          </span>
+        )}
+        {!currentUser.isOwner && r.ownerId !== currentUser.id && (
+          <button onClick={() => onAssign(currentUser.id)} className="btn-secondary ml-auto text-xs">
+            Claim this lead
+          </button>
+        )}
+      </div>
+    )}
     <TrustScorePanel r={r} />
     <SiteIntelSection r={r} />
     <IssuesSection r={r} prevalence={prevalence} totalScanned={totalScanned} />
@@ -887,6 +981,8 @@ function toRow(p: {
   leadName?: string | null;
   trustScore?: number | null;
   trustBreakdown?: string | null;
+  ownerId?: string | null;
+  ownerName?: string | null;
 }): ProspectRow {
   return {
     id: p.id,
@@ -918,6 +1014,8 @@ function toRow(p: {
     leadName: p.leadName ?? null,
     trustScore: p.trustScore ?? null,
     trustBreakdown: p.trustBreakdown ?? null,
+    ownerId: p.ownerId ?? null,
+    ownerName: p.ownerName ?? null,
   };
 }
 

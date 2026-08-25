@@ -51,6 +51,8 @@ model Prospect {
   trustScore     Int?
   trustBreakdown String? // JSON: { pillars, capped, band }
 
+  ownerId        String? // the sales rep (AdminUser) this lead is assigned to
+
   // Site intelligence gathered in the same quick scan.
   platform           String? // detected builder/CMS (Wix, WordPress, GoDaddy, Squarespace…)
   builtBy            String? // "powered by / website by" credit found on the page
@@ -97,6 +99,7 @@ model Demo {
   id           String  @id @default(cuid())
   token        String  @unique
   prospectId   String?
+  ownerId      String? // the sales rep (AdminUser) this demo belongs to
   sourceUrl    String
   businessName String?
 
@@ -297,6 +300,9 @@ model AdminUser {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
+  name         String?
+  role         String   @default("OWNER") // OWNER (full access) | SALES (own leads)
+  calendlyUrl  String? // this rep's booking link, used for their demos
   createdAt    DateTime @default(now())
 }
 

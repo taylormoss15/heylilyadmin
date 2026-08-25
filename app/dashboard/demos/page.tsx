@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser, isOwner } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,10 @@ function hostOf(url: string): string {
 }
 
 export default async function DemosPage() {
-  const demos = await prisma.demo.findMany({ orderBy: { createdAt: "desc" }, take: 200 });
+  const me = await getCurrentUser();
+  // Reps see only their own demos; owners see everything.
+  const where = me && !isOwner(me) ? { ownerId: me.id } : {};
+  const demos = await prisma.demo.findMany({ where, orderBy: { createdAt: "desc" }, take: 200 });
   const opened = demos.filter((d) => d.views > 0).length;
 
   return (

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 // Top-level dashboard sections. The active section stays lit as you drill into
 // its detail pages (an account, a prospect), so you always know where you are.
-const SECTIONS: { href: string; label: string; hint: string; match: (p: string) => boolean }[] = [
+const SECTIONS: { href: string; label: string; hint: string; ownerOnly?: boolean; match: (p: string) => boolean }[] = [
   {
     href: "/dashboard",
     label: "Accounts",
@@ -36,19 +36,28 @@ const SECTIONS: { href: string; label: string; hint: string; match: (p: string) 
     hint: "Preview & test templates",
     match: (p) => p.startsWith("/dashboard/emails"),
   },
+  {
+    href: "/dashboard/team",
+    label: "Team",
+    hint: "Reps & lead access",
+    ownerOnly: true,
+    match: (p) => p.startsWith("/dashboard/team"),
+  },
 ];
 
 export default function DashboardNav({
   launchpadPending = 0,
   launchpadOverdue = 0,
+  isOwner = true,
 }: {
+  isOwner?: boolean;
   launchpadPending?: number;
   launchpadOverdue?: number;
 }) {
   const pathname = usePathname();
   return (
     <nav className="w-44 shrink-0 space-y-1">
-      {SECTIONS.map((s) => {
+      {SECTIONS.filter((s) => isOwner || !s.ownerOnly).map((s) => {
         const active = s.match(pathname);
         const showBadge = s.href === "/dashboard/launchpad" && launchpadPending > 0;
         return (

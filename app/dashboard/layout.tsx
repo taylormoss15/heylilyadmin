@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { computeImplementation, inputsFromClient, implementationInclude } from "@/lib/onboarding";
+import { getCurrentUser, isOwner } from "@/lib/current-user";
 import LogoutButton from "./logout-button";
 import DashboardNav from "./dashboard-nav";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const me = await getCurrentUser();
+
   // Count paid accounts that aren't live yet (and how many are overdue) so the
   // Launchpad nav item can show an at-a-glance badge.
   const paid = await prisma.client.findMany({ where: { paidAt: { not: null } }, include: implementationInclude });
@@ -29,7 +32,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </header>
       <div className="mx-auto flex max-w-7xl gap-8 px-6 py-8">
-        <DashboardNav launchpadPending={launchpadPending} launchpadOverdue={launchpadOverdue} />
+        <DashboardNav launchpadPending={launchpadPending} launchpadOverdue={launchpadOverdue} isOwner={isOwner(me)} />
         <main className="min-w-0 flex-1">{children}</main>
       </div>
     </div>
