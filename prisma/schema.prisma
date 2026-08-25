@@ -122,6 +122,7 @@ model Demo {
   // After (the AI redesign)
   redesignHtml String? // finalized, compliance-checked HTML of the new site
   afterScore   Float?
+  afterShot    String? // data: URL (JPEG) screenshot of the redesign, for before/after
   dryRun       Boolean @default(false) // true when built in mock mode (no AI key)
 
   // Digital Trust Score, before → projected after (the 62 → 92 story).

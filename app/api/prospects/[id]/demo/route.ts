@@ -8,6 +8,7 @@ import { outcomeIssues } from "@/lib/prospecting/issues";
 import { analyzeHtmlSignals } from "@/lib/prospecting/html-signals";
 import { computeAeo } from "@/lib/prospecting/aeo";
 import { computeTrustScore } from "@/lib/prospecting/trust-score";
+import { screenshotHtml } from "@/lib/site/screenshot";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -85,6 +86,9 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     }).score;
   })();
 
+  // Capture an "after" screenshot of the redesign for the outreach before/after.
+  const afterShot = redesignHtml ? await screenshotHtml(redesignHtml) : null;
+
   const demo = await prisma.demo.create({
     data: {
       token,
@@ -104,6 +108,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       platform: prospect.platform ?? null,
       redesignHtml,
       afterScore,
+      afterShot: afterShot ?? null,
       beforeTrust,
       afterTrust,
       dryRun,

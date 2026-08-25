@@ -108,41 +108,80 @@ export function newSaleEmail(input: { clientName: string; baseUrl: string; clien
 
 // ---- 3. Cold outreach → a prospect (Chunk C) ----
 export function coldOutreachEmail(input: {
-  businessName: string;
-  trustScore: number;
-  afterScore: number;
-  topIssues: string[];
-  reportUrl: string;
-  bookUrl: string;
+  firstName?: string | null;
+  firmName: string;
+  score: number;
+  newScore: number;
+  beforeShotUrl?: string | null;
+  afterShotUrl?: string | null;
+  accessibilityIssue: string;
+  mobileIssue: string;
+  seoIssue: string;
+  conversionIssue: string;
+  reportUrl: string; // "See the website we built for {firm}"
+  senderName: string;
+  senderPhone: string;
   address: string;
   unsubscribeUrl: string;
 }): BuiltEmail {
-  const issues = input.topIssues
-    .slice(0, 3)
-    .map((it) => `<tr><td style="padding:4px 0;color:#b91c1c;font-size:15px;vertical-align:top;width:20px">✕</td><td style="padding:4px 0;font-size:15px">${esc(it)}</td></tr>`)
-    .join("");
+  const firm = esc(input.firmName);
+  const greeting = input.firstName ? `Hi ${esc(input.firstName)},` : "Hi there,";
+
+  // The before → after proof: the score jump, plus screenshots when we have
+  // real hosted URLs (data-URL images are stripped by Gmail, so only render
+  // <img> when a real URL is supplied; otherwise show a labeled placeholder).
+  const shotCell = (label: string, url: string | null | undefined, color: string) =>
+    `<td width="50%" style="padding:6px;vertical-align:top">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:${color};margin:0 0 4px">${label}</div>
+      ${
+        url
+          ? `<img src="${url}" alt="${label} website" width="248" style="display:block;width:100%;max-width:248px;border:1px solid ${T.BORDER};border-radius:8px" />`
+          : `<div style="height:150px;border:1px dashed ${T.BORDER};border-radius:8px;background:#f8fafc"></div>`
+      }
+    </td>`;
+
+  const opportunity = (title: string, issue: string, why: string) =>
+    `<tr><td style="padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:15px;line-height:1.5">
+      <strong style="color:${T.INK}">${title}:</strong> ${esc(issue)}. <span style="color:${T.MUTED}">${why}</span>
+    </td></tr>`;
 
   const content = `
-    <p style="margin:0 0 14px;font-size:16px">Hi — we ran a quick, free check on <strong>${esc(input.businessName)}</strong>'s website.</p>
-    <div style="background:#f8fafc;border:1px solid ${T.BORDER};border-radius:12px;padding:16px;text-align:center;margin:0 0 16px">
-      <div style="color:${T.MUTED};font-size:12px;text-transform:uppercase;letter-spacing:.05em;font-weight:700">Digital Trust Score</div>
-      <div style="font-size:15px;color:${T.MUTED};margin-top:6px">
-        <span style="font-size:34px;font-weight:800;color:#dc2626">${input.trustScore}</span>
-        <span style="color:#94a3b8">&nbsp;→&nbsp;</span>
-        <span style="font-size:34px;font-weight:800;color:#059669">${input.afterScore}</span>
-      </div>
-      <div style="color:${T.MUTED};font-size:13px;margin-top:4px">today &nbsp;→&nbsp; with a new site from us</div>
+    <p style="margin:0 0 14px;font-size:16px">${greeting}</p>
+    <p style="margin:0 0 14px;font-size:15px;line-height:1.6">We analyzed <strong>${firm}</strong>'s website across accessibility, mobile experience, search visibility, speed and client conversion.</p>
+
+    <div style="background:#f8fafc;border:1px solid ${T.BORDER};border-radius:12px;padding:18px;text-align:center;margin:0 0 16px">
+      <div style="font-size:15px;color:${T.MUTED}">Your current website scored</div>
+      <div style="font-size:44px;font-weight:800;color:#dc2626;line-height:1.05;margin:2px 0">${input.score}<span style="font-size:20px;color:#94a3b8">/100</span></div>
+      <div style="font-size:15px;color:${T.MUTED};margin-top:8px">We didn't stop there — we built a new website for your firm that scored</div>
+      <div style="font-size:44px;font-weight:800;color:#059669;line-height:1.05;margin:2px 0">${input.newScore}<span style="font-size:20px;color:#6ee7b7">/100</span></div>
     </div>
-    <p style="margin:0 0 8px;font-size:15px">A few things quietly costing you clients right now:</p>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px">${issues}</table>
-    <p style="margin:0 0 18px;font-size:15px">Below a perfect score you're also exposed to ADA accessibility lawsuits — typically a <strong>$25,000–$50,000</strong> settlement. We build you a beautiful, fully-compliant site that fixes all of it and gets found on Google and AI search.</p>
-    <p style="margin:0 0 6px">${emailButton("See your full report & new site", input.reportUrl, "#059669")}</p>
-    <p style="margin:10px 0 0;font-size:14px"><a href="${input.bookUrl}" style="color:${T.BRAND}">…or book a 10-minute call to walk through it</a></p>`;
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px">
+      <tr>${shotCell("Today", input.beforeShotUrl, "#b91c1c")}${shotCell("Your new site", input.afterShotUrl, "#059669")}</tr>
+    </table>
+
+    <p style="margin:0 0 8px;font-size:15px;font-weight:600">The biggest opportunities we found:</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px">
+      ${opportunity("Accessibility", input.accessibilityIssue, "Accessibility problems can prevent potential clients from using your site and may increase exposure to demand letters or litigation.")}
+      ${opportunity("Mobile conversion", input.mobileIssue, "Most prospective clients will first encounter your firm on a phone, and unnecessary friction costs consultations.")}
+      ${opportunity("Search visibility", input.seoIssue, "Technical and local-search weaknesses make it harder for Google to understand, rank and recommend your firm.")}
+      ${opportunity("Trust and conversion", input.conversionIssue, "Prospective clients need to understand why they should trust you — and what to do next — within seconds.")}
+    </table>
+
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.6">Your complete report shows the individual tests, what failed and what we changed.</p>
+
+    <p style="margin:0 0 6px">${emailButton(`See the website we built for ${input.firmName} →`, input.reportUrl, "#059669")}</p>
+
+    <p style="margin:16px 0 18px;font-size:15px;line-height:1.6">The new site is already designed around your firm, services, reviews and existing brand. If you like it, you can purchase it directly from the preview or schedule a short walkthrough of your complete score.</p>
+
+    <p style="margin:0;font-size:15px;line-height:1.5">— ${esc(input.senderName)}<br>Hey Lily<br><a href="tel:${esc(input.senderPhone)}" style="color:${T.BRAND};text-decoration:none">${esc(input.senderPhone)}</a></p>
+
+    <p style="margin:20px 0 0;font-size:13px;color:${T.MUTED};line-height:1.6"><strong>P.S.</strong> This isn't a generic mockup. We built it specifically for ${firm} using your current branding, practice areas and public business information.</p>`;
 
   return {
-    subject: `${input.businessName}: your website scored ${input.trustScore}/100`,
+    subject: `${input.firmName}'s website scored ${input.score}/100 — we built you a ${input.newScore}`,
     html: emailLayout({
-      preheader: `We can take ${input.businessName} from ${input.trustScore} to ${input.afterScore}.`,
+      preheader: `We rebuilt ${input.firmName}'s site — it scored ${input.newScore}/100.`,
       contentHtml: content,
       footer: { address: input.address, unsubscribeUrl: input.unsubscribeUrl },
     }),
