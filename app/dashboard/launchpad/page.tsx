@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { computeImplementation, inputsFromClient, implementationInclude } from "@/lib/onboarding";
+import { getCurrentUser, isOwner } from "@/lib/current-user";
+import DigestButton from "./digest-button";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +11,7 @@ function daysSince(d: Date): number {
 }
 
 export default async function LaunchpadPage() {
+  const me = await getCurrentUser();
   const clients = await prisma.client.findMany({
     where: { paidAt: { not: null } },
     include: implementationInclude,
@@ -27,12 +30,15 @@ export default async function LaunchpadPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">Launchpad</h1>
-        <p className="text-sm text-slate-500">
-          {pending.length} paid {pending.length === 1 ? "account" : "accounts"} not yet live — get these live ASAP ·{" "}
-          {live.length} fully live
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">Launchpad</h1>
+          <p className="text-sm text-slate-500">
+            {pending.length} paid {pending.length === 1 ? "account" : "accounts"} not yet live — get these live ASAP ·{" "}
+            {live.length} fully live
+          </p>
+        </div>
+        {isOwner(me) && <DigestButton email={me!.email} />}
       </div>
 
       {pending.length === 0 ? (
