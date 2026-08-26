@@ -134,53 +134,82 @@ interface LeadRow {
   name?: string;
 }
 
-// Parse a CSV lead list. Handles quoted fields and maps common header names to
-// our fields; the website/url column is required per row.
-function parseCsvLeads(text: string): LeadRow[] {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n").filter((l) => l.trim().length > 0);
-  if (lines.length < 2) return [];
+type FieldKey = "url" | "businessName" | "name" | "email" | "phone";
 
-  const splitRow = (line: string): string[] => {
-    const out: string[] = [];
-    let cur = "";
-    let inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (inQ) {
-        if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
-        else if (c === '"') inQ = false;
-        else cur += c;
-      } else if (c === '"') inQ = true;
-      else if (c === ",") { out.push(cur); cur = ""; }
-      else cur += c;
-    }
-    out.push(cur);
-    return out.map((s) => s.trim());
-  };
+const FIELD_META: { key: FieldKey; label: string; required?: boolean; hint: string }[] = [
+  { key: "url", label: "Website", required: true, hint: "The firm's site — we scan & score this" },
+  { key: "businessName", label: "Business name", hint: "Shown on the demo & in the email" },
+  { key: "name", label: "Contact first name", hint: "Personalizes the email greeting" },
+  { key: "email", label: "Contact email", hint: "Where the outreach is sent" },
+  { key: "phone", label: "Phone", hint: "Optional, stored on the lead" },
+];
 
-  const headers = splitRow(lines[0]).map((h) => h.toLowerCase().replace(/[^a-z]/g, ""));
-  const find = (...cands: string[]) => headers.findIndex((h) => cands.some((c) => h.includes(c)));
-  const iUrl = find("website", "url", "domain", "site");
-  const iBiz = find("business", "company", "firm", "practice", "organization");
-  const iEmail = find("email");
-  const iPhone = find("phone", "tel", "mobile");
-  const iName = find("firstname", "contact", "name");
-  if (iUrl < 0) return [];
+// Ordered candidate tokens per field (normalized: lowercase, alphanumeric only).
+// Earlier candidates win; an exact header match beats a partial one.
+const FIELD_CANDIDATES: Record<FieldKey, string[]> = {
+  url: ["website", "websiteurl", "url", "domain", "siteurl", "site", "webaddress"],
+  businessName: ["companyname", "businessname", "company", "business", "firmname", "firm", "practicename", "organization", "name"],
+  name: ["firstname", "contactfirstname", "fullname", "contactname", "nameforemails", "contact"],
+  email: ["email", "emailaddress", "contactemail", "workemail", "primaryemail"],
+  phone: ["phone", "contactphone", "phonenumber", "telephone", "mobile", "tel", "cell"],
+};
 
-  const rows: LeadRow[] = [];
-  for (let r = 1; r < lines.length; r++) {
-    const cols = splitRow(lines[r]);
-    const url = (cols[iUrl] || "").trim();
-    if (!url) continue;
-    rows.push({
-      url,
-      businessName: iBiz >= 0 ? cols[iBiz] : undefined,
-      email: iEmail >= 0 ? cols[iEmail] : undefined,
-      phone: iPhone >= 0 ? cols[iPhone] : undefined,
-      name: iName >= 0 ? cols[iName] : undefined,
+const normHeader = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+// Score how well a header matches a candidate: 3 = exact, 2 = startsWith, 1 =
+// includes, 0 = no match. Multiplied by candidate priority so the first listed
+// candidate is strongly preferred.
+function headerScore(header: string, candidates: string[]): number {
+  const h = normHeader(header);
+  let best = 0;
+  candidates.forEach((cand, idx) => {
+    const priority = candidates.length - idx;
+    let m = 0;
+    if (h === cand) m = 3;
+    else if (h.startsWith(cand)) m = 2;
+    else if (h.includes(cand)) m = 1;
+    if (m) best = Math.max(best, m * 100 + priority);
+  });
+  return best;
+}
+
+// Greedily assign each field its best-matching column, never reusing a column.
+function autoMap(headers: string[]): Record<FieldKey, number> {
+  const map: Record<FieldKey, number> = { url: -1, businessName: -1, name: -1, email: -1, phone: -1 };
+  const used = new Set<number>();
+  for (const { key } of FIELD_META) {
+    let bestCol = -1;
+    let bestScore = 0;
+    headers.forEach((header, col) => {
+      if (used.has(col)) return;
+      const s = headerScore(header, FIELD_CANDIDATES[key]);
+      if (s > bestScore) {
+        bestScore = s;
+        bestCol = col;
+      }
     });
+    if (bestCol >= 0) {
+      map[key] = bestCol;
+      used.add(bestCol);
+    }
   }
-  return rows;
+  return map;
+}
+
+// Parse a .csv or .xlsx lead list into a header row + string cells. SheetJS
+// reads both formats (Excel files renamed .csv included), so this handles the
+// real-world exports reps upload. Loaded lazily to keep it out of the main bundle.
+async function parseFileToGrid(file: File): Promise<{ headers: string[]; rows: string[][] }> {
+  const XLSX = await import("xlsx");
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: "array" });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  if (!sheet) return { headers: [], rows: [] };
+  const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false, defval: "" });
+  if (aoa.length < 1) return { headers: [], rows: [] };
+  const headers = (aoa[0] as unknown[]).map((h) => String(h ?? "").trim());
+  const rows = aoa.slice(1).map((r) => (r as unknown[]).map((c) => String(c ?? "").trim()));
+  return { headers, rows };
 }
 
 function hostOf(url: string): string {
@@ -233,6 +262,12 @@ export default function ProspectsClient({
   const [reviewOnly, setReviewOnly] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [mapState, setMapState] = useState<{
+    fileName: string;
+    headers: string[];
+    rows: string[][];
+    map: Record<FieldKey, number>;
+  } | null>(null);
   const [stageFilter, setStageFilter] = useState<Stage | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [building, setBuilding] = useState<{ done: number; total: number } | null>(null);
@@ -269,26 +304,64 @@ export default function ProspectsClient({
     router.refresh();
   }
 
-  async function importCsv(file: File) {
+  // Step 1a: read the uploaded file (.csv or .xlsx) and open the field-matching
+  // modal with our best-guess column mapping pre-filled.
+  async function chooseFile(file: File) {
+    setImportMsg(null);
+    setImporting(true);
+    try {
+      const { headers, rows } = await parseFileToGrid(file);
+      if (headers.length === 0 || rows.length === 0) {
+        setImportMsg("Couldn't read any rows from that file. Export it as .csv or .xlsx and try again.");
+        return;
+      }
+      setMapState({ fileName: file.name, headers, rows, map: autoMap(headers) });
+    } catch {
+      setImportMsg("Couldn't read that file. Make sure it's a .csv or .xlsx export.");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  // Step 1b: map the columns the rep confirmed and import the leads.
+  async function runImport() {
+    if (!mapState) return;
+    const m = mapState.map;
+    if (m.url < 0) {
+      setImportMsg("Pick which column holds the Website — it's required.");
+      return;
+    }
+    const leads: LeadRow[] = [];
+    for (const r of mapState.rows) {
+      const url = (r[m.url] || "").trim();
+      if (!url) continue;
+      const pick = (k: FieldKey) => (m[k] >= 0 ? (r[m[k]] || "").trim() || undefined : undefined);
+      leads.push({
+        url,
+        businessName: pick("businessName"),
+        email: pick("email"),
+        phone: pick("phone"),
+        name: pick("name"),
+      });
+    }
+    if (leads.length === 0) {
+      setImportMsg("None of the rows had a value in the Website column you picked.");
+      return;
+    }
     setImporting(true);
     setImportMsg(null);
     try {
-      const text = await file.text();
-      const rowsParsed = parseCsvLeads(text);
-      if (rowsParsed.length === 0) {
-        setImportMsg("No rows found. Include a header row with a website/url column.");
-        return;
-      }
       const res = await fetch("/api/prospects/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: rowsParsed }),
+        body: JSON.stringify({ rows: leads }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setImportMsg(typeof data.error === "string" ? data.error : "Import failed.");
         return;
       }
+      setMapState(null);
       setImportMsg(`Imported ${data.created} new, updated ${data.updated}${data.skipped ? `, skipped ${data.skipped}` : ""}. Refreshing…`);
       router.refresh();
     } finally {
@@ -518,6 +591,61 @@ export default function ProspectsClient({
 
   return (
     <div className="space-y-6">
+      {mapState && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 sm:p-8">
+          <div className="w-full max-w-2xl rounded-xl bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Match your columns</h3>
+                <p className="text-sm text-slate-500">
+                  <span className="font-medium">{mapState.fileName}</span> · {mapState.rows.length} row{mapState.rows.length === 1 ? "" : "s"}. We matched what we could — confirm or adjust below.
+                </p>
+              </div>
+              <button onClick={() => setMapState(null)} className="text-slate-400 hover:text-slate-600" aria-label="Cancel">✕</button>
+            </div>
+
+            <div className="mt-4 space-y-2.5">
+              {FIELD_META.map(({ key, label, required, hint }) => {
+                const col = mapState.map[key];
+                const sample = col >= 0 ? (mapState.rows.find((r) => (r[col] || "").trim())?.[col] || "").trim() : "";
+                return (
+                  <div key={key} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[180px_1fr]">
+                    <div>
+                      <span className="text-sm font-medium text-slate-800">{label}</span>
+                      {required && <span className="ml-1 text-red-500">*</span>}
+                      <p className="text-[11px] text-slate-400">{hint}</p>
+                    </div>
+                    <div>
+                      <select
+                        className={`input w-full text-sm ${required && col < 0 ? "border-red-300" : ""}`}
+                        value={col}
+                        onChange={(e) =>
+                          setMapState((s) => (s ? { ...s, map: { ...s.map, [key]: Number(e.target.value) } } : s))
+                        }
+                      >
+                        <option value={-1}>— Not mapped —</option>
+                        {mapState.headers.map((h, i) => (
+                          <option key={i} value={i}>{h || `Column ${i + 1}`}</option>
+                        ))}
+                      </select>
+                      {sample && <p className="mt-0.5 truncate text-[11px] text-slate-400">e.g. {sample}</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {importMsg && <p className="mt-3 text-sm text-red-600">{importMsg}</p>}
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button onClick={() => setMapState(null)} className="btn-secondary text-sm">Cancel</button>
+              <button onClick={runImport} disabled={importing || mapState.map.url < 0} className="btn text-sm">
+                {importing ? "Importing…" : `Import ${mapState.rows.length} lead${mapState.rows.length === 1 ? "" : "s"}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Prospecting</h1>
         <p className="text-sm text-slate-500">Your lead pipeline — work it left to right.</p>
@@ -528,8 +656,8 @@ export default function ProspectsClient({
         <div className="flex flex-wrap items-center gap-1.5">
           <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-600 text-[11px] font-bold text-white">1</span>
-            {importing ? "Importing…" : "Upload leads"}
-            <input type="file" accept=".csv,text/csv" className="hidden" disabled={importing} onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])} />
+            {importing ? "Reading…" : "Upload leads"}
+            <input type="file" accept=".csv,.xlsx,.xls,text/csv" className="hidden" disabled={importing} onChange={(e) => { if (e.target.files?.[0]) chooseFile(e.target.files[0]); e.target.value = ""; }} />
           </label>
           {PIPELINE.map((s) => {
             const active = stageFilter === s.key;
@@ -643,13 +771,13 @@ export default function ProspectsClient({
           🔥 Booked only
         </label>
         <label className="btn-secondary cursor-pointer text-sm">
-          {importing ? "Importing…" : "Upload CSV"}
+          {importing ? "Reading…" : "Upload list"}
           <input
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xlsx,.xls,text/csv"
             className="hidden"
             disabled={importing}
-            onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])}
+            onChange={(e) => { if (e.target.files?.[0]) chooseFile(e.target.files[0]); e.target.value = ""; }}
           />
         </label>
         <label className="flex items-center gap-2 text-sm text-slate-600">
