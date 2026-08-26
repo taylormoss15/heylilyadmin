@@ -80,9 +80,11 @@ export async function sendOutreach(prospectId: string, opts: { force?: boolean }
     unsubscribeUrl: `${base}/u/${prospect.id}`,
   });
 
-  // Cold email comes from the rep on the cold-sending domain, reply-to the rep.
-  const fromEmail = process.env.OUTREACH_FROM_EMAIL;
-  const fromName = owner?.name || "Hey Lily";
+  // Cold email comes from the rep's own sending address on the cold domain
+  // (e.g. gretchen@mail.heylily.ai), so replies land in their inbox. Falls back
+  // to the shared OUTREACH_FROM_EMAIL only if a rep has no sending address.
+  const fromEmail = owner?.sendingEmail || process.env.OUTREACH_FROM_EMAIL;
+  const fromName = owner?.name || process.env.OUTREACH_DEFAULT_SENDER_NAME || "Hey Lily";
   const from = fromEmail ? `${fromName} <${fromEmail}>` : undefined;
 
   const result = await sendEmail({
@@ -90,7 +92,7 @@ export async function sendOutreach(prospectId: string, opts: { force?: boolean }
     subject: built.subject,
     html: built.html,
     from,
-    replyTo: owner?.email,
+    replyTo: owner?.sendingEmail || owner?.email,
   });
 
   if (!result.sent) return { sent: false, reason: result.reason || "Send failed" };

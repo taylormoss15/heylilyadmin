@@ -10,13 +10,14 @@ interface User {
   role: string;
   calendlyUrl: string | null;
   phone: string | null;
+  sendingEmail: string | null;
   isMe: boolean;
 }
 
 export default function TeamManager({ users }: { users: User[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "SALES", calendlyUrl: "", phone: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "SALES", calendlyUrl: "", phone: "", sendingEmail: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +36,7 @@ export default function TeamManager({ users }: { users: User[] }) {
       setError(typeof data.error === "string" ? data.error : "Could not create the user.");
       return;
     }
-    setForm({ name: "", email: "", password: "", role: "SALES", calendlyUrl: "", phone: "" });
+    setForm({ name: "", email: "", password: "", role: "SALES", calendlyUrl: "", phone: "", sendingEmail: "" });
     setOpen(false);
     router.refresh();
   }
@@ -61,7 +62,10 @@ export default function TeamManager({ users }: { users: User[] }) {
                 <td className="px-4 py-3 font-medium text-slate-800">
                   {u.name || "—"} {u.isMe && <span className="text-xs text-slate-400">(you)</span>}
                 </td>
-                <td className="px-4 py-3 text-slate-600">{u.email}</td>
+                <td className="px-4 py-3 text-slate-600">
+                  {u.email}
+                  {u.sendingEmail && <span className="block text-[11px] text-slate-400">sends from {u.sendingEmail}</span>}
+                </td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${u.role === "OWNER" ? "bg-slate-800 text-white" : "bg-brand-100 text-brand-700"}`}>
                     {u.role === "OWNER" ? "Owner" : "Sales"}
@@ -88,8 +92,9 @@ export default function TeamManager({ users }: { users: User[] }) {
               <option value="SALES">Sales rep</option>
               <option value="OWNER">Owner (full access)</option>
             </select>
-            <input className="input" placeholder="Direct phone (shown in outreach signature)" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
-            <input className="input" placeholder="Calendly link (optional)" value={form.calendlyUrl} onChange={(e) => set("calendlyUrl", e.target.value)} />
+            <input className="input" placeholder="Direct phone (shown in signature)" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+            <input className="input" placeholder="Sending email e.g. gretchen@mail.heylily.ai" value={form.sendingEmail} onChange={(e) => set("sendingEmail", e.target.value)} />
+            <input className="input sm:col-span-2" placeholder="Calendly link (optional)" value={form.calendlyUrl} onChange={(e) => set("calendlyUrl", e.target.value)} />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2">

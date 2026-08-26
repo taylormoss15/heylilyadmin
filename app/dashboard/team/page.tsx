@@ -30,6 +30,7 @@ export default async function TeamPage() {
           role: u.role,
           calendlyUrl: u.calendlyUrl,
           phone: u.phone,
+          sendingEmail: u.sendingEmail,
           isMe: u.id === me!.id,
         }))}
       />

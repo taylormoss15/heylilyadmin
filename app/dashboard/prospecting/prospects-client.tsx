@@ -86,6 +86,46 @@ export interface ProspectRow {
 
 type SortKey = "score" | "businessName" | "url" | "industry" | "estimatedRevenue" | "employees";
 
+// The 6-step pipeline. Each lead sits in exactly one stage, derived from its
+// state — this drives the step bar and the contextual bulk actions.
+type Stage = "scan" | "build" | "review" | "queued" | "sent" | "rejected" | "off";
+
+const PIPELINE: { key: Stage; n: number; label: string }[] = [
+  { key: "scan", n: 2, label: "Scan & score" },
+  { key: "build", n: 3, label: "Build websites" },
+  { key: "review", n: 4, label: "Review & approve" },
+  { key: "queued", n: 5, label: "Queued to send" },
+  { key: "sent", n: 6, label: "Sent" },
+];
+
+const STAGE_LABEL: Record<Stage, string> = {
+  scan: "To scan",
+  build: "Scored — build website",
+  review: "Built — review",
+  queued: "Queued to send",
+  sent: "Sent",
+  rejected: "Rejected",
+  off: "Dismissed",
+};
+
+function stageOf(r: ProspectRowLike): Stage {
+  if (r.status === "DISMISSED") return "off";
+  if (r.emailed) return "sent";
+  if (r.reviewStatus === "REJECTED") return "rejected";
+  if (r.reviewStatus === "APPROVED") return "queued";
+  if (r.demoToken) return "review";
+  if (r.scanStatus === "COMPLETED") return "build";
+  return "scan";
+}
+
+interface ProspectRowLike {
+  status: string;
+  emailed: boolean;
+  reviewStatus: string;
+  demoToken: string | null;
+  scanStatus: string;
+}
+
 interface LeadRow {
   url: string;
   businessName?: string;
@@ -193,6 +233,41 @@ export default function ProspectsClient({
   const [reviewOnly, setReviewOnly] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [stageFilter, setStageFilter] = useState<Stage | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [building, setBuilding] = useState<{ done: number; total: number } | null>(null);
+
+  function toggleSelected(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // Step 3: build the AI websites for the selected (scored) leads, in sequence.
+  async function buildWebsites() {
+    const ids = [...selected].filter((id) => {
+      const r = rows.find((x) => x.id === id);
+      return r && stageOf(r) === "build";
+    });
+    if (ids.length === 0) return;
+    setBuilding({ done: 0, total: ids.length });
+    for (let i = 0; i < ids.length; i++) {
+      try {
+        const res = await fetch(`/api/prospects/${ids[i]}/demo`, { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.token) patchRow(ids[i], { demoToken: data.token });
+      } catch {
+        /* keep going */
+      }
+      setBuilding({ done: i + 1, total: ids.length });
+    }
+    setBuilding(null);
+    setSelected(new Set());
+    router.refresh();
+  }
 
   async function importCsv(file: File) {
     setImporting(true);
@@ -393,6 +468,7 @@ export default function ProspectsClient({
       if (ownerFilter === "mine" && r.ownerId !== currentUser?.id) return false;
       if (ownerFilter === "unassigned" && r.ownerId) return false;
       if (bookedOnly && !r.demoBooked) return false;
+      if (stageFilter && stageOf(r) !== stageFilter) return false;
       if (reviewOnly && !(r.demoToken && r.reviewStatus === "PENDING" && !r.emailed)) return false;
       if (q && !`${r.businessName ?? ""} ${r.url} ${r.industry ?? ""}`.toLowerCase().includes(q)) return false;
       return true;
@@ -410,9 +486,24 @@ export default function ProspectsClient({
       const bv = (b[sortKey] ?? "").toString().toLowerCase();
       return av.localeCompare(bv) * dir;
     });
-  }, [rows, query, showDismissed, sortKey, sortDir, ownerFilter, bookedOnly, reviewOnly, currentUser?.id]);
+  }, [rows, query, showDismissed, sortKey, sortDir, ownerFilter, bookedOnly, reviewOnly, stageFilter, currentUser?.id]);
 
   const pendingCount = rows.filter((r) => r.status === "PROSPECT" && r.scanStatus !== "COMPLETED").length;
+
+  const stageCounts = useMemo(() => {
+    const scope = rows.filter((r) => (currentUser?.isOwner ? true : r.ownerId === currentUser?.id));
+    const c: Partial<Record<Stage, number>> = {};
+    for (const r of scope) {
+      const s = stageOf(r);
+      c[s] = (c[s] ?? 0) + 1;
+    }
+    return c;
+  }, [rows, currentUser]);
+
+  const selectedBuildable = [...selected].filter((id) => {
+    const r = rows.find((x) => x.id === id);
+    return r && stageOf(r) === "build";
+  }).length;
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -429,10 +520,65 @@ export default function ProspectsClient({
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Prospecting</h1>
-        <p className="text-sm text-slate-500">
-          Run the compliance checker on any site to score its risk, then convert the best leads into accounts.
-          Riskiest sites sort to the top.
-        </p>
+        <p className="text-sm text-slate-500">Your lead pipeline — work it left to right.</p>
+      </div>
+
+      {/* The 6-step pipeline. Click a step to see the leads waiting there. */}
+      <div className="card">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-600 text-[11px] font-bold text-white">1</span>
+            {importing ? "Importing…" : "Upload leads"}
+            <input type="file" accept=".csv,text/csv" className="hidden" disabled={importing} onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])} />
+          </label>
+          {PIPELINE.map((s) => {
+            const active = stageFilter === s.key;
+            return (
+              <div key={s.key} className="flex items-center gap-1.5">
+                <span className="text-slate-300">→</span>
+                <button
+                  onClick={() => setStageFilter(active ? null : s.key)}
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm ${
+                    active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${active ? "bg-white text-slate-900" : "bg-slate-200 text-slate-600"}`}>{s.n}</span>
+                  {s.label}
+                  <span className={`ml-0.5 rounded-full px-1.5 text-[11px] font-semibold ${active ? "bg-white/20" : "bg-slate-100 text-slate-500"}`}>{stageCounts[s.key] ?? 0}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        {/* Contextual action for the current step */}
+        <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
+          {stageFilter === "scan" && (
+            <button onClick={scanPending} disabled={scanning || pendingCount === 0} className="btn text-sm">
+              {scanning && scanProgress ? `Scanning ${scanProgress.done}/${scanProgress.total}…` : `Scan & score (${pendingCount})`}
+            </button>
+          )}
+          {stageFilter === "build" && (
+            <>
+              <button onClick={buildWebsites} disabled={!!building || selectedBuildable === 0} className="btn text-sm">
+                {building ? `Building ${building.done}/${building.total}…` : `Build websites for selected (${selectedBuildable})`}
+              </button>
+              <span className="text-xs text-slate-500">Tick the leads you want a website built for, then build.</span>
+            </>
+          )}
+          {stageFilter === "review" && <span className="text-sm text-slate-500">Open each lead → preview the site → Approve &amp; queue or Reject.</span>}
+          {stageFilter === "queued" && (
+            <button onClick={sendOutreachBulk} disabled={sending || visible.filter(isReady).length === 0} className="btn text-sm">
+              {sending ? "Sending…" : `✉️ Send outreach (${visible.filter(isReady).length})`}
+            </button>
+          )}
+          {stageFilter === "sent" && <span className="text-sm text-slate-500">These leads have been emailed. Booked demos show 🔥.</span>}
+          {!stageFilter && <span className="text-sm text-slate-500">Pick a step above to work that stage — or add leads to start.</span>}
+        </div>
+        {(building || scanProgress || sendMsg || importMsg) && (
+          <p className="mt-2 text-xs text-slate-500">
+            {building ? `Building websites ${building.done}/${building.total}…` : sendMsg || importMsg}
+          </p>
+        )}
       </div>
 
       <form onSubmit={addUrls} className="card space-y-3">
@@ -534,6 +680,22 @@ export default function ProspectsClient({
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
+              <th className="px-3 py-3">
+                <input
+                  type="checkbox"
+                  aria-label="Select all buildable"
+                  checked={selectedBuildable > 0 && visible.filter((r) => stageOf(r) === "build").every((r) => selected.has(r.id))}
+                  onChange={(e) => {
+                    const buildIds = visible.filter((r) => stageOf(r) === "build").map((r) => r.id);
+                    setSelected((s) => {
+                      const next = new Set(s);
+                      if (e.target.checked) buildIds.forEach((id) => next.add(id));
+                      else buildIds.forEach((id) => next.delete(id));
+                      return next;
+                    });
+                  }}
+                />
+              </th>
               <th className="cursor-pointer px-4 py-3" onClick={() => toggleSort("score")}>Trust Score{arrow("score")}</th>
               <th className="cursor-pointer px-4 py-3" onClick={() => toggleSort("businessName")}>Business{arrow("businessName")}</th>
               <th className="cursor-pointer px-4 py-3" onClick={() => toggleSort("url")}>Website{arrow("url")}</th>
@@ -567,12 +729,14 @@ export default function ProspectsClient({
                   onAssign={(ownerId) => assign(r.id, ownerId)}
                   onSendOutreach={() => sendOne(r.id)}
                   onReview={(status) => review(r.id, status)}
+                  selected={selected.has(r.id)}
+                  onToggleSelect={() => toggleSelected(r.id)}
                 />
               );
             })}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
                   No prospects yet. Paste some websites above to score them.
                 </td>
               </tr>
@@ -607,6 +771,8 @@ function FragmentRow({
   onAssign,
   onSendOutreach,
   onReview,
+  selected,
+  onToggleSelect,
 }: {
   r: ProspectRow;
   risk: { label: string; cls: string };
@@ -625,9 +791,12 @@ function FragmentRow({
   onAssign: (ownerId: string | null) => void;
   onSendOutreach: () => Promise<{ ok: boolean; reason?: string }>;
   onReview: (status: "APPROVED" | "REJECTED" | "PENDING") => void;
+  selected: boolean;
+  onToggleSelect: () => void;
 }) {
   const [scanning, setScanning] = useState(false);
   const dimmed = r.status === "DISMISSED";
+  const stage = stageOf(r);
 
   async function runScan() {
     setScanning(true);
@@ -638,6 +807,11 @@ function FragmentRow({
   return (
     <>
       <tr className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${dimmed ? "opacity-50" : ""}`}>
+        <td className="px-3 py-3">
+          {stage === "build" && (
+            <input type="checkbox" aria-label="Select for website build" checked={selected} onChange={onToggleSelect} />
+          )}
+        </td>
         <td className="px-4 py-3">
           {r.scanStatus === "COMPLETED" ? (
             <span className={`font-semibold ${risk.cls}`}>
@@ -654,6 +828,9 @@ function FragmentRow({
           <button onClick={onToggle} className="text-left font-medium text-brand-600 hover:underline">
             {r.businessName || hostOf(r.url)}
           </button>
+          {stage !== "off" && (
+            <div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{STAGE_LABEL[stage]}</div>
+          )}
           {r.source === "inbound" && (
             <div className="mt-0.5 inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
               Inbound lead{r.leadEmail ? " ✓" : ""}
@@ -696,7 +873,7 @@ function FragmentRow({
       </tr>
       {isOpen && (
         <tr className="bg-slate-50/60">
-          <td colSpan={7} className="px-4 py-4">
+          <td colSpan={8} className="px-4 py-4">
             <DetailsPanel
               r={r}
               scanning={scanning}
@@ -1222,7 +1399,7 @@ function DemoBlock({
             </button>
           </div>
           <button onClick={generate} className="w-full text-[11px] text-slate-500 hover:text-slate-800">
-            Regenerate
+            ↻ Redo website
           </button>
         </div>
       ) : (

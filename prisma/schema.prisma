@@ -314,6 +314,7 @@ model AdminUser {
   role         String   @default("OWNER") // OWNER (full access) | SALES (own leads)
   calendlyUrl  String? // this rep's booking link, used for their demos
   phone        String? // this rep's direct phone, shown in their outreach signature
+  sendingEmail String? // this rep's cold-outreach from-address, e.g. gretchen@mail.heylily.ai
   createdAt    DateTime @default(now())
 }
 
