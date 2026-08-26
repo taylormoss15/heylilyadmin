@@ -9,6 +9,13 @@ const rowSchema = z.object({
   email: z.string().optional().nullable(),
   phone: z.string().optional().nullable(),
   name: z.string().optional().nullable(),
+  title: z.string().optional().nullable(),
+  industry: z.string().optional().nullable(),
+  estimatedRevenue: z.string().optional().nullable(),
+  employees: z.string().optional().nullable(),
+  location: z.string().optional().nullable(),
+  linkedin: z.string().optional().nullable(),
+  emailStatus: z.string().optional().nullable(),
 });
 const bodySchema = z.object({ rows: z.array(rowSchema).max(5000) });
 
@@ -37,6 +44,13 @@ export async function POST(request: NextRequest) {
       email: clean(row.email),
       phone: clean(row.phone),
       leadName: clean(row.name),
+      contactTitle: clean(row.title),
+      industry: clean(row.industry),
+      estimatedRevenue: clean(row.estimatedRevenue),
+      employees: clean(row.employees),
+      location: clean(row.location),
+      contactLinkedin: clean(row.linkedin),
+      emailStatus: clean(row.emailStatus),
     };
 
     if (existing) {
@@ -47,6 +61,14 @@ export async function POST(request: NextRequest) {
           email: existing.email ?? fields.email,
           phone: existing.phone ?? fields.phone,
           leadName: existing.leadName ?? fields.leadName,
+          contactTitle: existing.contactTitle ?? fields.contactTitle,
+          industry: existing.industry ?? fields.industry,
+          estimatedRevenue: existing.estimatedRevenue ?? fields.estimatedRevenue,
+          employees: existing.employees ?? fields.employees,
+          location: existing.location ?? fields.location,
+          contactLinkedin: existing.contactLinkedin ?? fields.contactLinkedin,
+          // Deliverability can change between list pulls — always take the latest.
+          emailStatus: fields.emailStatus ?? existing.emailStatus,
         },
       });
       updated++;

@@ -31,12 +31,18 @@ model Prospect {
   id               String   @id @default(cuid())
   url              String   @unique // normalized (lowercase host, no trailing slash) for dedup
   businessName     String? // best-guess from the page; editable
-  industry         String? // manually enriched
+  industry         String? // manually enriched or imported (e.g. "Tax attorney")
   estimatedRevenue String? // manually enriched (free-form, e.g. "$1M–$5M")
   employees        String? // manually enriched (free-form, e.g. "11–50")
   phone            String?
   email            String?
   notes            String?
+
+  // Contact + firm enrichment imported from a lead list.
+  contactTitle    String? // the contact's role, e.g. "Attorney" — personalizes outreach
+  location        String? // city/state or full address, shown to the rep
+  contactLinkedin String? // contact's LinkedIn profile for manual research
+  emailStatus     String? // deliverability from the list (e.g. VALID | INVALID) — skip invalid when sending
 
   scanStatus     String  @default("PENDING") // PENDING | COMPLETED | FAILED
   scanError      String?

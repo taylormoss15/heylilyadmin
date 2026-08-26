@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { outcomeFor } from "@/lib/prospecting/issues";
 import type { AeoCheck } from "@/lib/prospecting/aeo";
@@ -132,16 +132,32 @@ interface LeadRow {
   email?: string;
   phone?: string;
   name?: string;
+  title?: string;
+  industry?: string;
+  estimatedRevenue?: string;
+  employees?: string;
+  location?: string;
+  linkedin?: string;
+  emailStatus?: string;
 }
 
-type FieldKey = "url" | "businessName" | "name" | "email" | "phone";
+type FieldKey =
+  | "url" | "businessName" | "name" | "email" | "phone"
+  | "title" | "industry" | "estimatedRevenue" | "employees" | "location" | "linkedin" | "emailStatus";
 
-const FIELD_META: { key: FieldKey; label: string; required?: boolean; hint: string }[] = [
+const FIELD_META: { key: FieldKey; label: string; required?: boolean; hint: string; group?: string }[] = [
   { key: "url", label: "Website", required: true, hint: "The firm's site — we scan & score this" },
   { key: "businessName", label: "Business name", hint: "Shown on the demo & in the email" },
   { key: "name", label: "Contact first name", hint: "Personalizes the email greeting" },
   { key: "email", label: "Contact email", hint: "Where the outreach is sent" },
   { key: "phone", label: "Phone", hint: "Optional, stored on the lead" },
+  { key: "title", label: "Contact title", hint: "Their role, e.g. Attorney", group: "Enrichment (optional)" },
+  { key: "industry", label: "Industry", hint: "Practice area, e.g. Tax attorney" },
+  { key: "estimatedRevenue", label: "Est. revenue", hint: "Auto-formatted if it's a number" },
+  { key: "employees", label: "Employees", hint: "Headcount, for qualifying" },
+  { key: "location", label: "Location", hint: "City/state or address" },
+  { key: "linkedin", label: "Contact LinkedIn", hint: "For manual research" },
+  { key: "emailStatus", label: "Email status", hint: "Deliverability — we skip 'invalid' when sending" },
 ];
 
 // Ordered candidate tokens per field (normalized: lowercase, alphanumeric only).
@@ -152,9 +168,41 @@ const FIELD_CANDIDATES: Record<FieldKey, string[]> = {
   name: ["firstname", "contactfirstname", "fullname", "contactname", "nameforemails", "contact"],
   email: ["email", "emailaddress", "contactemail", "workemail", "primaryemail"],
   phone: ["phone", "contactphone", "phonenumber", "telephone", "mobile", "tel", "cell"],
+  title: ["title", "jobtitle", "contacttitle", "role", "position"],
+  industry: ["subtypes", "practicearea", "industry", "type", "category", "companyinsightsindustry"],
+  estimatedRevenue: ["revenue", "estimatedrevenue", "annualrevenue", "companyinsightsrevenue"],
+  employees: ["employees", "headcount", "staff", "companysize", "companyinsightsemployees"],
+  location: ["address", "location", "city", "fulladdress", "streetaddress"],
+  linkedin: ["contactlinkedin", "linkedin", "linkedinurl", "linkedinprofile"],
+  emailStatus: ["emailsvalidatorstatus", "validatorstatus", "emailstatus", "deliverability", "emailvalidation"],
 };
 
 const normHeader = (h: string) => h.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+// "LEGAL_SERVICES" / "tax attorney" → "Legal Services" / "Tax Attorney".
+// Leaves already-mixed-case values (real names) alone.
+function prettyLabel(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  if (/[a-z]/.test(v) && /[A-Z]/.test(v)) return v; // already nicely cased
+  return v
+    .replace(/[_-]+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
+
+// A bare revenue number like "1000000" → "$1M". Passes through anything that
+// already looks formatted (e.g. "$1M–$5M").
+function formatRevenue(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  const digits = v.replace(/[,\s]/g, "");
+  if (!/^\d+$/.test(digits)) return v;
+  const n = Number(digits);
+  if (n >= 1_000_000_000) return `$${+(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `$${+(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `$${+(n / 1_000).toFixed(0)}K`;
+  return `$${n}`;
+}
 
 // Score how well a header matches a candidate: 3 = exact, 2 = startsWith, 1 =
 // includes, 0 = no match. Multiplied by candidate priority so the first listed
@@ -175,7 +223,7 @@ function headerScore(header: string, candidates: string[]): number {
 
 // Greedily assign each field its best-matching column, never reusing a column.
 function autoMap(headers: string[]): Record<FieldKey, number> {
-  const map: Record<FieldKey, number> = { url: -1, businessName: -1, name: -1, email: -1, phone: -1 };
+  const map = Object.fromEntries(FIELD_META.map(({ key }) => [key, -1])) as Record<FieldKey, number>;
   const used = new Set<number>();
   for (const { key } of FIELD_META) {
     let bestCol = -1;
@@ -342,6 +390,13 @@ export default function ProspectsClient({
         email: pick("email"),
         phone: pick("phone"),
         name: pick("name"),
+        title: prettyLabel(pick("title")),
+        industry: prettyLabel(pick("industry")),
+        estimatedRevenue: formatRevenue(pick("estimatedRevenue")),
+        employees: pick("employees"),
+        location: pick("location"),
+        linkedin: pick("linkedin"),
+        emailStatus: pick("emailStatus"),
       });
     }
     if (leads.length === 0) {
@@ -605,11 +660,15 @@ export default function ProspectsClient({
             </div>
 
             <div className="mt-4 space-y-2.5">
-              {FIELD_META.map(({ key, label, required, hint }) => {
+              {FIELD_META.map(({ key, label, required, hint, group }) => {
                 const col = mapState.map[key];
                 const sample = col >= 0 ? (mapState.rows.find((r) => (r[col] || "").trim())?.[col] || "").trim() : "";
                 return (
-                  <div key={key} className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[180px_1fr]">
+                  <Fragment key={key}>
+                  {group && (
+                    <p className="mt-2 border-t border-slate-100 pt-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{group}</p>
+                  )}
+                  <div className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[180px_1fr]">
                     <div>
                       <span className="text-sm font-medium text-slate-800">{label}</span>
                       {required && <span className="ml-1 text-red-500">*</span>}
@@ -631,6 +690,7 @@ export default function ProspectsClient({
                       {sample && <p className="mt-0.5 truncate text-[11px] text-slate-400">e.g. {sample}</p>}
                     </div>
                   </div>
+                  </Fragment>
                 );
               })}
             </div>

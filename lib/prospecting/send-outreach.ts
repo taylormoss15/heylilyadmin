@@ -41,6 +41,13 @@ export async function sendOutreach(prospectId: string, opts: { force?: boolean }
   const to = (prospect.email || prospect.leadEmail || "").trim();
   if (!to) return { sent: false, reason: "No contact email on this lead" };
 
+  // The lead list may flag an address as invalid/undeliverable. Sending to it
+  // guarantees a bounce, which hurts the cold-sending domain's reputation — skip
+  // unless explicitly forced.
+  if (!opts.force && /invalid|undeliverable|bad|catch|risky|do_?not/i.test(prospect.emailStatus || "")) {
+    return { sent: false, reason: `Email flagged "${prospect.emailStatus}" — skipped to protect deliverability` };
+  }
+
   const cap = Number(process.env.OUTREACH_DAILY_CAP || 100);
   if ((await sentToday()) >= cap) return { sent: false, reason: `Daily send cap reached (${cap})` };
 
