@@ -93,7 +93,7 @@ export async function sendOutreach(prospectId: string, opts: { force?: boolean }
     subject: built.subject,
     html: built.html,
     from,
-    replyTo: owner?.email || owner?.sendingEmail,
+    replyTo: owner?.email || owner?.sendingEmail || undefined,
   });
 
   if (!result.sent) return { sent: false, reason: result.reason || "Send failed" };
