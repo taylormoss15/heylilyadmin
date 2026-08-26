@@ -79,6 +79,7 @@ export interface ProspectRow {
   emailed: boolean;
   unsubscribed: boolean;
   hasEmail: boolean;
+  emailInvalid: boolean;
   reviewStatus: string;
   contactName: string | null;
   contactEmail: string | null;
@@ -428,6 +429,7 @@ export default function ProspectsClient({
     return (
       !!r.demoToken &&
       r.hasEmail &&
+      !r.emailInvalid &&
       !!r.ownerId &&
       r.reviewStatus === "APPROVED" &&
       !r.emailed &&
@@ -1027,6 +1029,14 @@ function FragmentRow({
           {r.demoBooked && (
             <div className="mt-0.5 inline-block rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-orange-700">
               🔥 Demo booked{r.bookedWith ? ` · ${r.bookedWith}` : ""}
+            </div>
+          )}
+          {r.emailInvalid && (
+            <div
+              title="This address was flagged invalid/undeliverable in the list — it'll be skipped when sending to protect your domain reputation."
+              className="mt-0.5 inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700"
+            >
+              ⚠ Invalid email
             </div>
           )}
           {r.unsubscribed ? (
@@ -1637,6 +1647,7 @@ function toRow(p: {
   emailed?: boolean;
   unsubscribed?: boolean;
   hasEmail?: boolean;
+  emailInvalid?: boolean;
   reviewStatus?: string;
   contactName?: string | null;
   contactEmail?: string | null;
@@ -1678,6 +1689,7 @@ function toRow(p: {
     emailed: p.emailed ?? false,
     unsubscribed: p.unsubscribed ?? false,
     hasEmail: p.hasEmail ?? false,
+    emailInvalid: p.emailInvalid ?? false,
     reviewStatus: p.reviewStatus ?? "PENDING",
     contactName: p.contactName ?? null,
     contactEmail: p.contactEmail ?? null,
