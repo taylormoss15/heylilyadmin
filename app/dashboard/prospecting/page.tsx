@@ -103,6 +103,11 @@ export default async function ProspectingPage() {
       totalScanned={scanned.length}
       currentUser={me ? { id: me.id, name: me.name || me.email, isOwner: owner } : null}
       reps={reps.map((r) => ({ id: r.id, name: r.name || r.email }))}
+      outreachConfig={{
+        hasCompanyAddress: Boolean(process.env.COMPANY_ADDRESS),
+        hasFromFallback: Boolean(process.env.OUTREACH_FROM_EMAIL),
+        emailConfigured: Boolean(process.env.RESEND_API_KEY),
+      }}
     />
   );
 }

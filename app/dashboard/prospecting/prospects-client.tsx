@@ -275,18 +275,26 @@ export interface CurrentUser {
   isOwner: boolean;
 }
 
+export interface OutreachConfig {
+  hasCompanyAddress: boolean;
+  hasFromFallback: boolean;
+  emailConfigured: boolean;
+}
+
 export default function ProspectsClient({
   initial,
   prevalence,
   totalScanned,
   currentUser,
   reps,
+  outreachConfig,
 }: {
   initial: ProspectRow[];
   prevalence: Record<string, number>;
   totalScanned: number;
   currentUser: CurrentUser | null;
   reps: { id: string; name: string }[];
+  outreachConfig: OutreachConfig;
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<ProspectRow[]>(initial);
@@ -646,6 +654,13 @@ export default function ProspectsClient({
 
   const arrow = (key: SortKey) => (sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "");
 
+  // Server-side env checks surfaced so the owner isn't guessing whether sending
+  // is fully configured. COMPANY_ADDRESS is a legal (CAN-SPAM) requirement.
+  const configWarnings: string[] = [];
+  if (!outreachConfig.emailConfigured) configWarnings.push("RESEND_API_KEY isn't set — no email can be sent yet.");
+  if (!outreachConfig.hasCompanyAddress) configWarnings.push("COMPANY_ADDRESS isn't set — required by law (CAN-SPAM) in the email footer.");
+  if (!outreachConfig.hasFromFallback) configWarnings.push("OUTREACH_FROM_EMAIL isn't set — reps without their own \"sends from\" address won't be able to send.");
+
   return (
     <div className="space-y-6">
       {mapState && (
@@ -764,6 +779,16 @@ export default function ProspectsClient({
           {stageFilter === "sent" && <span className="text-sm text-slate-500">These leads have been emailed. Booked demos show 🔥.</span>}
           {!stageFilter && <span className="text-sm text-slate-500">Pick a step above to work that stage — or add leads to start.</span>}
         </div>
+        {stageFilter === "queued" && configWarnings.length > 0 && (
+          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p className="font-semibold">⚠️ Finish setup before sending:</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+              {configWarnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         {(building || scanProgress || sendMsg || importMsg) && (
           <p className="mt-2 text-xs text-slate-500">
             {building ? `Building websites ${building.done}/${building.total}…` : sendMsg || importMsg}
