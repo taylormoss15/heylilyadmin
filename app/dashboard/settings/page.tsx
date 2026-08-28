@@ -76,6 +76,18 @@ export default async function SettingsPage() {
   const groups = buildChecks();
   const requiredMissing = groups.flatMap((g) => g.checks).filter((c) => c.tier === "required" && !c.ok);
 
+  // The behind-the-scenes dashboards. Coolify is self-hosted, so its URL comes
+  // from COOLIFY_URL when set (otherwise the card links to Coolify's site).
+  const coolifyUrl = process.env.COOLIFY_URL || "https://coolify.io";
+  const services = [
+    { name: "Coolify", what: "Runs the app + database", why: "deploy, change env variables, read logs", href: coolifyUrl },
+    { name: "Cloudflare", what: "Screenshots (R2) + client site hosting", why: "R2 buckets, API tokens, DNS", href: "https://dash.cloudflare.com" },
+    { name: "Resend", what: "Sends all email", why: "verify domains, check delivery & bounces", href: "https://resend.com/domains" },
+    { name: "Stripe", what: "Payments", why: "see charges, subscriptions, webhooks", href: "https://dashboard.stripe.com" },
+    { name: "Anthropic", what: "AI site generation", why: "API key + usage/billing", href: "https://console.anthropic.com" },
+    { name: "GitHub", what: "Your code + daily-digest cron", why: "code, the Actions cron secret", href: "https://github.com/taylormoss15/heylilyadmin" },
+  ];
+
   const items = [
     { href: "/dashboard/team", label: "Team", desc: "Add sales reps, set roles, and give them logins." },
     { href: "/dashboard/emails", label: "System emails", desc: "Preview and test every email the platform sends." },
@@ -120,6 +132,31 @@ export default async function SettingsPage() {
                 ))}
               </ul>
             </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
+        <h2 className="text-sm font-semibold text-slate-900">Where everything lives</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          You do 99% of your work right here in the admin app. Only open the dashboards below when you need to change a key, verify a domain, or check delivery — <span className="font-medium">System status</span> above tells you which one.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {services.map((s) => (
+            <a
+              key={s.name}
+              href={s.href}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg border border-slate-200 p-3 transition hover:border-brand-300"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-slate-800">{s.name}</span>
+                <span className="text-[11px] text-brand-600">open ↗</span>
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500">{s.what}</p>
+              <p className="mt-1 text-[11px] text-slate-400">Go here to: {s.why}</p>
+            </a>
           ))}
         </div>
       </div>
