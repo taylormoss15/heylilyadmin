@@ -1010,6 +1010,7 @@ function FragmentRow({
   onToggleSelect: () => void;
 }) {
   const [scanning, setScanning] = useState(false);
+  const [building, setBuilding] = useState(false);
   const dimmed = r.status === "DISMISSED";
   const stage = stageOf(r);
 
@@ -1017,6 +1018,19 @@ function FragmentRow({
     setScanning(true);
     await onScan();
     setScanning(false);
+  }
+
+  // Build the AI demo site for just this lead, right from the row, so you can
+  // rip through the list without opening each one.
+  async function buildOne() {
+    setBuilding(true);
+    try {
+      const res = await fetch(`/api/prospects/${r.id}/demo`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.token) onPatch({ demoToken: data.token });
+    } finally {
+      setBuilding(false);
+    }
   }
 
   return (
@@ -1088,10 +1102,48 @@ function FragmentRow({
         <td className="px-4 py-3 text-slate-600">{r.industry || <span className="text-slate-300">—</span>}</td>
         <td className="px-4 py-3 text-slate-600">{r.estimatedRevenue || <span className="text-slate-300">—</span>}</td>
         <td className="px-4 py-3 text-slate-600">{r.employees || <span className="text-slate-300">—</span>}</td>
-        <td className="px-4 py-3 text-right">
-          <button onClick={onToggle} className="text-xs text-slate-500 hover:text-slate-800">
-            {isOpen ? "Close" : "Details"}
-          </button>
+        <td className="px-4 py-3">
+          <div className="flex items-center justify-end gap-1.5">
+            {r.demoToken ? (
+              <>
+                <a
+                  href={`/demo/${r.demoToken}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg bg-brand-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-brand-700"
+                >
+                  Open demo ↗
+                </a>
+                <a
+                  href={`/demo/${r.demoToken}/report`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Report ↗
+                </a>
+              </>
+            ) : stage === "build" ? (
+              <button
+                onClick={buildOne}
+                disabled={building}
+                className="rounded-lg bg-emerald-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-400 disabled:opacity-60"
+              >
+                {building ? "Building…" : "＋ Build site"}
+              </button>
+            ) : stage === "scan" ? (
+              <button
+                onClick={runScan}
+                disabled={scanning}
+                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {scanning ? "Scanning…" : "Scan"}
+              </button>
+            ) : null}
+            <button onClick={onToggle} className="ml-0.5 text-xs text-slate-400 hover:text-slate-800">
+              {isOpen ? "Close" : "Details"}
+            </button>
+          </div>
         </td>
       </tr>
       {isOpen && (
