@@ -25,6 +25,56 @@ async function sentToday(): Promise<number> {
   return prisma.prospect.count({ where: { emailedAt: { gte: start } } });
 }
 
+// Build the personalized outreach email for a prospect (subject + HTML), applying
+// any per-lead overrides (custom note / subject). Shared by the send path and the
+// preview endpoint so what you preview is exactly what sends. `override` lets the
+// preview screen render unsaved edits without persisting them first.
+export async function composeOutreachEmail(
+  prospectId: string,
+  override?: { note?: string | null; subject?: string | null }
+): Promise<{ subject: string; html: string } | { error: string }> {
+  const prospect = await prisma.prospect.findUnique({ where: { id: prospectId } });
+  if (!prospect) return { error: "Not found" };
+  if (!prospect.demoToken) return { error: "Generate a demo first" };
+
+  const owner = prospect.ownerId ? await prisma.adminUser.findUnique({ where: { id: prospect.ownerId } }) : null;
+  const base = (process.env.ADMIN_BASE_URL || "https://admin.heylily.ai").replace(/\/$/, "");
+  const demo = await prisma.demo.findUnique({ where: { token: prospect.demoToken } });
+
+  const issues = outreachIssues(parse<RawViolation>(prospect.violations), parse<AeoCheck>(prospect.aeoChecks));
+
+  const firmName = prospect.businessName || (() => {
+    try {
+      return new URL(prospect.url).hostname.replace(/^www\./, "");
+    } catch {
+      return prospect.url;
+    }
+  })();
+  const firstName = prospect.leadName ? prospect.leadName.trim().split(/\s+/)[0] : null;
+
+  const built = coldOutreachEmail({
+    firstName,
+    firmName,
+    score: prospect.trustScore ?? 0,
+    newScore: demo?.afterTrust ?? 92,
+    beforeShotUrl: demo?.beforeShot ? `${base}/demo/${prospect.demoToken}/shot/before` : null,
+    afterShotUrl: demo?.afterShot ? `${base}/demo/${prospect.demoToken}/shot/after` : null,
+    accessibilityIssue: issues.accessibilityIssue,
+    mobileIssue: issues.mobileIssue,
+    seoIssue: issues.seoIssue,
+    conversionIssue: issues.conversionIssue,
+    reportUrl: `${base}/demo/${prospect.demoToken}/report`,
+    senderName: owner?.name || process.env.OUTREACH_DEFAULT_SENDER_NAME || "The Hey Lily Team",
+    senderPhone: owner?.phone || process.env.OUTREACH_DEFAULT_PHONE || "",
+    address: process.env.COMPANY_ADDRESS || "Hey Lily",
+    unsubscribeUrl: `${base}/u/${prospect.id}`,
+    customNote: override && "note" in override ? override.note : prospect.outreachNote,
+    subjectOverride: override && "subject" in override ? override.subject : prospect.outreachSubject,
+  });
+
+  return { subject: built.subject, html: built.html };
+}
+
 // Send the personalized cold email for one prospect. Enforces every guard:
 // must have a demo to link, a recipient email, not be unsubscribed, not already
 // emailed (unless forced), and stay under the daily warmup cap.
@@ -52,40 +102,9 @@ export async function sendOutreach(prospectId: string, opts: { force?: boolean }
   if ((await sentToday()) >= cap) return { sent: false, reason: `Daily send cap reached (${cap})` };
 
   const owner = prospect.ownerId ? await prisma.adminUser.findUnique({ where: { id: prospect.ownerId } }) : null;
-  const base = (process.env.ADMIN_BASE_URL || "https://admin.heylily.ai").replace(/\/$/, "");
-  const demo = await prisma.demo.findUnique({ where: { token: prospect.demoToken } });
 
-  const issues = outreachIssues(
-    parse<RawViolation>(prospect.violations),
-    parse<AeoCheck>(prospect.aeoChecks)
-  );
-
-  const firmName = prospect.businessName || (() => {
-    try {
-      return new URL(prospect.url).hostname.replace(/^www\./, "");
-    } catch {
-      return prospect.url;
-    }
-  })();
-  const firstName = prospect.leadName ? prospect.leadName.trim().split(/\s+/)[0] : null;
-
-  const built = coldOutreachEmail({
-    firstName,
-    firmName,
-    score: prospect.trustScore ?? 0,
-    newScore: demo?.afterTrust ?? 92,
-    beforeShotUrl: demo?.beforeShot ? `${base}/demo/${prospect.demoToken}/shot/before` : null,
-    afterShotUrl: demo?.afterShot ? `${base}/demo/${prospect.demoToken}/shot/after` : null,
-    accessibilityIssue: issues.accessibilityIssue,
-    mobileIssue: issues.mobileIssue,
-    seoIssue: issues.seoIssue,
-    conversionIssue: issues.conversionIssue,
-    reportUrl: `${base}/demo/${prospect.demoToken}/report`,
-    senderName: owner?.name || process.env.OUTREACH_DEFAULT_SENDER_NAME || "The Hey Lily Team",
-    senderPhone: owner?.phone || process.env.OUTREACH_DEFAULT_PHONE || "",
-    address: process.env.COMPANY_ADDRESS || "Hey Lily",
-    unsubscribeUrl: `${base}/u/${prospect.id}`,
-  });
+  const built = await composeOutreachEmail(prospect.id);
+  if ("error" in built) return { sent: false, reason: built.error };
 
   // From the rep's cold-sending address (e.g. gretchen@mail.heylily.ai) to
   // protect the main domain's reputation, but Reply-To their normal inbox

@@ -107,6 +107,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       seoChecks: prospect.aeoChecks ?? null,
       platform: prospect.platform ?? null,
       redesignHtml,
+      businessData: JSON.stringify(imported.businessData),
       afterScore,
       afterShot: afterShot ?? null,
       beforeTrust,

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { outcomeFor } from "@/lib/prospecting/issues";
 import type { AeoCheck } from "@/lib/prospecting/aeo";
@@ -891,6 +891,20 @@ export default function ProspectsClient({
       {sendMsg && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{sendMsg}</p>}
       {importMsg && <p className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700">{importMsg}</p>}
 
+      {selectedBuildable > 0 && (
+        <div className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5 shadow-sm">
+          <span className="text-sm font-medium text-brand-800">
+            {selectedBuildable} lead{selectedBuildable === 1 ? "" : "s"} checked — build their websites, then they move to <strong>Built — review</strong>.
+          </span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSelected(new Set())} className="text-xs text-slate-500 hover:text-slate-800">Clear</button>
+            <button onClick={buildWebsites} disabled={!!building} className="btn text-sm">
+              {building ? `Building ${building.done}/${building.total}…` : `＋ Build ${selectedBuildable} checked`}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -1208,6 +1222,7 @@ function DetailsPanel({
 }) {
   const [outreachBusy, setOutreachBusy] = useState(false);
   const [outreachMsg, setOutreachMsg] = useState<string | null>(null);
+  const [emailPreview, setEmailPreview] = useState(false);
   const [fields, setFields] = useState({
     businessName: r.businessName ?? "",
     industry: r.industry ?? "",
@@ -1350,6 +1365,10 @@ function DetailsPanel({
               >
                 Open the preview to review →
               </a>
+              <button onClick={() => setEmailPreview(true)} className="block w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs font-medium text-brand-700 hover:bg-slate-50">
+                ✉️ Preview &amp; customize the email
+              </button>
+              {emailPreview && <EmailPreviewModal prospectId={r.id} onClose={() => setEmailPreview(false)} />}
               {r.reviewStatus === "APPROVED" ? (
                 <div className="flex items-center gap-2">
                   <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700">✓ Approved — queued</span>
@@ -1609,6 +1628,92 @@ function IssuesSection({
 
 // One-click sales demo: builds the interactive before/after redesign + the
 // scorecard, both on public share links. Takes ~1 minute (scrape + AI design).
+// Preview the outreach email exactly as it will send, and optionally customize
+// the subject line and add a personal note (saved per-lead) before queueing.
+function EmailPreviewModal({ prospectId, onClose }: { prospectId: string; onClose: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [html, setHtml] = useState("");
+  const [subject, setSubject] = useState("");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/prospects/${prospectId}/outreach/preview`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(typeof data.error === "string" ? data.error : "Could not load the email.");
+        return;
+      }
+      setHtml(data.html || "");
+      setSubject(data.savedSubject || "");
+      setNote(data.savedNote || "");
+    } finally {
+      setLoading(false);
+    }
+  }, [prospectId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function save() {
+    setSaving(true);
+    setSavedMsg(null);
+    try {
+      const res = await fetch(`/api/prospects/${prospectId}/outreach/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject, note }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setHtml(data.html || html);
+        setSavedMsg("Saved — this is what will send.");
+      } else {
+        setSavedMsg(typeof data.error === "string" ? data.error : "Could not save.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4 sm:p-8" onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <h3 className="text-sm font-semibold text-slate-900">Outreach email preview</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Close">✕</button>
+        </div>
+        <div className="space-y-3 p-4">
+          <div>
+            <label className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Subject</label>
+            <input className="input w-full text-sm" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Leave blank for the default subject" />
+          </div>
+          <div>
+            <label className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Personal note (optional — added at the top)</label>
+            <textarea className="input min-h-[60px] w-full text-sm" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Loved your recent case result — thought this might help." />
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={save} disabled={saving} className="btn text-sm">{saving ? "Saving…" : "Save changes"}</button>
+            {savedMsg && <span className="text-xs text-emerald-600">{savedMsg}</span>}
+          </div>
+          <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Preview</div>
+          {loading ? (
+            <div className="py-10 text-center text-sm text-slate-500">Loading…</div>
+          ) : error ? (
+            <p className="text-sm text-red-600">{error}</p>
+          ) : (
+            <iframe title="Email preview" srcDoc={html} className="h-[420px] w-full rounded-lg border border-slate-200" />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DemoBlock({
   prospectId,
   demoToken,
@@ -1621,6 +1726,35 @@ function DemoBlock({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editMsg, setEditMsg] = useState<string | null>(null);
+
+  // Apply a plain-English tweak to the generated site (colour, phone, email…).
+  async function applyEdit() {
+    const instruction = editText.trim();
+    if (!instruction) return;
+    setEditing(true);
+    setEditMsg(null);
+    try {
+      const res = await fetch(`/api/prospects/${prospectId}/demo/edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instruction }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        setEditMsg(typeof data.error === "string" ? data.error : "Edit failed.");
+        return;
+      }
+      setEditText("");
+      setEditMsg(data.summary ? `✓ ${data.summary}` : "✓ Applied. Reopen the demo to see it.");
+    } catch {
+      setEditMsg("Edit failed — please try again.");
+    } finally {
+      setEditing(false);
+    }
+  }
 
   async function generate() {
     setBusy(true);
@@ -1673,8 +1807,33 @@ function DemoBlock({
               {copied === "report" ? "Copied!" : "Copy scorecard link"}
             </button>
           </div>
+          {/* Quick AI tweaks — colours, phone, email, wording */}
+          <div className="rounded-md border border-slate-200 bg-white p-2">
+            {editing ? (
+              <div className="text-center text-[11px] text-slate-600">
+                <div className="mx-auto mb-1 h-4 w-4 animate-spin rounded-full border-2 border-brand-200 border-t-brand-500" />
+                Applying your change… (~30–60s)
+              </div>
+            ) : (
+              <>
+                <textarea
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  placeholder="Request a tweak — e.g. “change the phone to 801-555-1234”, “use navy blue as the accent”, “update the email to info@firm.com”"
+                  className="input min-h-[46px] w-full text-[11px]"
+                />
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-slate-400">One change at a time works best.</span>
+                  <button onClick={applyEdit} disabled={!editText.trim()} className="btn px-2.5 py-1 text-[11px] disabled:opacity-50">
+                    Apply change
+                  </button>
+                </div>
+              </>
+            )}
+            {editMsg && <p className={`mt-1 text-[11px] ${editMsg.startsWith("✓") ? "text-emerald-600" : "text-red-600"}`}>{editMsg}</p>}
+          </div>
           <button onClick={generate} className="w-full text-[11px] text-slate-500 hover:text-slate-800">
-            ↻ Redo website
+            ↻ Rebuild from scratch
           </button>
         </div>
       ) : (

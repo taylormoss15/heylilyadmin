@@ -44,6 +44,10 @@ model Prospect {
   contactLinkedin String? // contact's LinkedIn profile for manual research
   emailStatus     String? // deliverability from the list (e.g. VALID | INVALID) — skip invalid when sending
 
+  // Per-lead outreach customization, edited in the email preview before sending.
+  outreachSubject String? // overrides the default subject line
+  outreachNote    String? // a personal note injected at the top of the email
+
   scanStatus     String  @default("PENDING") // PENDING | COMPLETED | FAILED
   scanError      String?
   score          Float? // 0-100 accessibility score (higher = safer)
@@ -132,6 +136,7 @@ model Demo {
 
   // After (the AI redesign)
   redesignHtml String? // finalized, compliance-checked HTML of the new site
+  businessData String? // JSON of the scraped BusinessData, so inline edits don't re-scrape
   afterScore   Float?
   afterShot    String? // data: URL (JPEG) screenshot of the redesign, for before/after
   dryRun       Boolean @default(false) // true when built in mock mode (no AI key)

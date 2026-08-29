@@ -123,9 +123,14 @@ export function coldOutreachEmail(input: {
   senderPhone: string;
   address: string;
   unsubscribeUrl: string;
+  customNote?: string | null; // a personal line injected right after the greeting
+  subjectOverride?: string | null; // replaces the default subject when set
 }): BuiltEmail {
   const firm = esc(input.firmName);
   const greeting = input.firstName ? `Hi ${esc(input.firstName)},` : "Hi there,";
+  const note = input.customNote && input.customNote.trim()
+    ? `<p style="margin:0 0 14px;font-size:15px;line-height:1.6">${esc(input.customNote.trim()).replace(/\n/g, "<br>")}</p>`
+    : "";
 
   // The before → after proof: the score jump, plus screenshots when we have
   // real hosted URLs (data-URL images are stripped by Gmail, so only render
@@ -147,6 +152,7 @@ export function coldOutreachEmail(input: {
 
   const content = `
     <p style="margin:0 0 14px;font-size:16px">${greeting}</p>
+    ${note}
     <p style="margin:0 0 14px;font-size:15px;line-height:1.6">We analyzed <strong>${firm}</strong>'s website across accessibility, mobile experience, search visibility, speed and client conversion.</p>
 
     <div style="background:#f8fafc;border:1px solid ${T.BORDER};border-radius:12px;padding:18px;text-align:center;margin:0 0 16px">
@@ -179,7 +185,9 @@ export function coldOutreachEmail(input: {
     <p style="margin:20px 0 0;font-size:13px;color:${T.MUTED};line-height:1.6"><strong>P.S.</strong> This isn't a generic mockup. We built it specifically for ${firm} using your current branding, practice areas and public business information.</p>`;
 
   return {
-    subject: `${input.firmName}'s website scored ${input.score}/100 — we built you a ${input.newScore}`,
+    subject: input.subjectOverride && input.subjectOverride.trim()
+      ? input.subjectOverride.trim()
+      : `${input.firmName}'s website scored ${input.score}/100 — we built you a ${input.newScore}`,
     html: emailLayout({
       preheader: `We rebuilt ${input.firmName}'s site — it scored ${input.newScore}/100.`,
       contentHtml: content,
