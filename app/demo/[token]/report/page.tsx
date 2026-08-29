@@ -104,7 +104,15 @@ export default async function ReportPage({ params }: { params: { token: string }
   const topIssues = issues.slice(0, 3);
   const unlocked = demo.unlocked;
   const buyUrl = `/demo/${demo.token}/checkout`;
-  const bookBase = process.env.CALENDLY_URL || process.env.DEMO_CTA_URL || "https://heylily.ai";
+
+  // Prefer the assigned rep's own Calendly so the booking routes to whoever owns
+  // this lead; fall back to the team round-robin link, then the generic CTA.
+  const ownerId =
+    demo.ownerId ||
+    (demo.prospectId ? (await prisma.prospect.findUnique({ where: { id: demo.prospectId } }))?.ownerId ?? null : null);
+  const owner = ownerId ? await prisma.adminUser.findUnique({ where: { id: ownerId } }) : null;
+  const bookBase = owner?.calendlyUrl || process.env.CALENDLY_URL || process.env.DEMO_CTA_URL || "https://heylily.ai";
+
   // Tag the Calendly link with the prospect id so a booking maps back to this
   // lead (Calendly returns it as tracking.utm_content on the webhook).
   const bookUrl = demo.prospectId
@@ -322,7 +330,7 @@ export default async function ReportPage({ params }: { params: { token: string }
           </p>
           <div className="mt-3 text-center">
             <a
-              href={process.env.DEMO_CTA_URL || "https://heylily.ai"}
+              href={bookUrl}
               target="_blank"
               rel="noreferrer"
               className="inline-block rounded-lg bg-brand-600 px-6 py-3 font-semibold text-white hover:bg-brand-700"

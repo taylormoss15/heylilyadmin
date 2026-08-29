@@ -20,7 +20,16 @@ export default async function DemoPage({ params }: { params: { token: string } }
     .update({ where: { token: params.token }, data: { views: { increment: 1 }, lastViewedAt: new Date() } })
     .catch(() => {});
 
-  const ctaUrl = process.env.DEMO_CTA_URL || "https://heylily.ai";
+  // Route the CTA to the assigned rep's Calendly (falling back to the team link
+  // then the generic CTA), tagged with the prospect id so a booking maps back.
+  const ownerId =
+    demo.ownerId ||
+    (demo.prospectId ? (await prisma.prospect.findUnique({ where: { id: demo.prospectId } }))?.ownerId ?? null : null);
+  const owner = ownerId ? await prisma.adminUser.findUnique({ where: { id: ownerId } }) : null;
+  const bookBase = owner?.calendlyUrl || process.env.CALENDLY_URL || process.env.DEMO_CTA_URL || "https://heylily.ai";
+  const ctaUrl = demo.prospectId
+    ? `${bookBase}${bookBase.includes("?") ? "&" : "?"}utm_content=${encodeURIComponent(demo.prospectId)}`
+    : bookBase;
 
   return (
     <DemoViewer
