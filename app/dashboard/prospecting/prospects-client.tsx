@@ -298,6 +298,12 @@ export default function ProspectsClient({
 }) {
   const router = useRouter();
   const [rows, setRows] = useState<ProspectRow[]>(initial);
+  // Re-sync from the server whenever it hands us fresh data (after an import,
+  // a scan, router.refresh, etc.). Without this, useState(initial) keeps the
+  // stale first render and new leads never appear.
+  useEffect(() => {
+    setRows(initial);
+  }, [initial]);
   const [urlsText, setUrlsText] = useState("");
   const [adding, setAdding] = useState(false);
   const [addMsg, setAddMsg] = useState<string | null>(null);
@@ -426,7 +432,9 @@ export default function ProspectsClient({
         return;
       }
       setMapState(null);
-      setImportMsg(`Imported ${data.created} new, updated ${data.updated}${data.skipped ? `, skipped ${data.skipped}` : ""}. Refreshing…`);
+      setImportMsg(
+        `✓ Imported ${data.created} new, updated ${data.updated}${data.skipped ? `, skipped ${data.skipped}` : ""}. Next: open the “Scan & score” step and click Scan to score them.`
+      );
       router.refresh();
     } finally {
       setImporting(false);
@@ -556,10 +564,22 @@ export default function ProspectsClient({
     if (!pending.length) return;
     setScanning(true);
     setScanProgress({ done: 0, total: pending.length });
-    for (let i = 0; i < pending.length; i++) {
-      await scanOne(pending[i].id);
-      setScanProgress({ done: i + 1, total: pending.length });
+
+    // Scan a few at a time so a big import doesn't take hours. Each worker pulls
+    // the next lead off the queue until it's empty. Keep the tab open while it runs.
+    const CONCURRENCY = 4;
+    let next = 0;
+    let done = 0;
+    async function worker() {
+      while (next < pending.length) {
+        const i = next++;
+        await scanOne(pending[i].id);
+        done++;
+        setScanProgress({ done, total: pending.length });
+      }
     }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pending.length) }, worker));
+
     setScanning(false);
     setScanProgress(null);
   }
