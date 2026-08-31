@@ -25,7 +25,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   const me = await getCurrentUser();
   const prospect = await prisma.prospect.findUnique({
     where: { id: params.id },
-    select: { outreachSubject: true, outreachNote: true, ownerId: true },
+    select: { outreachSubject: true, outreachNote: true, ownerId: true, outreachHtml: true },
   });
 
   const built = await composeOutreachEmail(params.id);
@@ -50,24 +50,34 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     ownerIsViewer: Boolean(owner && me && owner.id === me.id),
     assigned: Boolean(owner),
     viewerName: me?.name || me?.email || null,
+    customHtml: Boolean(prospect?.outreachHtml),
   });
 }
 
-// Save per-lead overrides (custom subject / note) and return the re-rendered email.
+// Save per-lead overrides and return the re-rendered email.
+//  - { subject, note }         → subject + top-of-email personal note
+//  - { html }                  → a full hand-edited email (sends verbatim)
+//  - { resetHtml: true }       → drop the full-HTML edit, back to the template
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const access = await canAccess(params.id);
   if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
 
   const body = await request.json().catch(() => ({}));
-  const subject = typeof body?.subject === "string" ? body.subject.trim() : "";
-  const note = typeof body?.note === "string" ? body.note.trim() : "";
 
-  await prisma.prospect.update({
-    where: { id: params.id },
-    data: { outreachSubject: subject || null, outreachNote: note || null },
-  });
+  if (body?.resetHtml === true) {
+    await prisma.prospect.update({ where: { id: params.id }, data: { outreachHtml: null } });
+  } else if (typeof body?.html === "string" && body.html.trim()) {
+    await prisma.prospect.update({ where: { id: params.id }, data: { outreachHtml: body.html } });
+  } else {
+    const subject = typeof body?.subject === "string" ? body.subject.trim() : "";
+    const note = typeof body?.note === "string" ? body.note.trim() : "";
+    await prisma.prospect.update({
+      where: { id: params.id },
+      data: { outreachSubject: subject || null, outreachNote: note || null },
+    });
+  }
 
   const built = await composeOutreachEmail(params.id);
   if ("error" in built) return NextResponse.json({ error: built.error }, { status: 400 });
-  return NextResponse.json({ ok: true, subject: built.subject, html: built.html });
+  return NextResponse.json({ ok: true, subject: built.subject, html: built.html, customHtml: built.customHtml });
 }

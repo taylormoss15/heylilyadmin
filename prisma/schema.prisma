@@ -47,6 +47,7 @@ model Prospect {
   // Per-lead outreach customization, edited in the email preview before sending.
   outreachSubject String? // overrides the default subject line
   outreachNote    String? // a personal note injected at the top of the email
+  outreachHtml    String? // full hand-edited email HTML; when set it sends verbatim (overrides template + note)
 
   scanStatus     String  @default("PENDING") // PENDING | COMPLETED | FAILED
   scanError      String?

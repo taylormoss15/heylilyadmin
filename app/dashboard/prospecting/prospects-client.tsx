@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { outcomeFor } from "@/lib/prospecting/issues";
 import type { AeoCheck } from "@/lib/prospecting/aeo";
@@ -1660,6 +1660,11 @@ function EmailPreviewModal({ prospectId, onClose }: { prospectId: string; onClos
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [customHtml, setCustomHtml] = useState(false);
+  const [editingHtml, setEditingHtml] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [meta, setMeta] = useState<{
     from: string;
     replyTo: string;
@@ -1683,6 +1688,8 @@ function EmailPreviewModal({ prospectId, onClose }: { prospectId: string; onClos
       setHtml(data.html || "");
       setSubject(data.savedSubject || "");
       setNote(data.savedNote || "");
+      setCustomHtml(Boolean(data.customHtml));
+      setEditingHtml(false);
       setMeta({
         from: data.from || "",
         replyTo: data.replyTo || "",
@@ -1711,12 +1718,74 @@ function EmailPreviewModal({ prospectId, onClose }: { prospectId: string; onClos
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
         setHtml(data.html || html);
+        setCustomHtml(Boolean(data.customHtml));
         setSavedMsg("Saved — this is what will send.");
       } else {
         setSavedMsg(typeof data.error === "string" ? data.error : "Could not save.");
       }
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Toggle in-place WYSIWYG editing of the whole email via the iframe.
+  function toggleEdit() {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return;
+    const next = !editingHtml;
+    doc.designMode = next ? "on" : "off";
+    setEditingHtml(next);
+  }
+
+  async function saveHtml() {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc) return;
+    doc.designMode = "off";
+    const full = "<!DOCTYPE html>" + doc.documentElement.outerHTML;
+    setSaving(true);
+    setSavedMsg(null);
+    try {
+      const res = await fetch(`/api/prospects/${prospectId}/outreach/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ html: full }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setHtml(data.html || full);
+        setCustomHtml(true);
+        setEditingHtml(false);
+        setSavedMsg("Saved your edited email — this exact version will send.");
+      } else {
+        setSavedMsg(typeof data.error === "string" ? data.error : "Could not save.");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resetHtml() {
+    if (!confirm("Discard your hand-edited email and go back to the auto-generated template?")) return;
+    await fetch(`/api/prospects/${prospectId}/outreach/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resetHtml: true }),
+    });
+    await load();
+    setSavedMsg("Reset to the template.");
+  }
+
+  async function sendTest() {
+    setTesting(true);
+    setTestMsg(null);
+    try {
+      const res = await fetch(`/api/prospects/${prospectId}/outreach/test`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      setTestMsg(res.ok && data.ok ? `✓ Test sent to ${data.to}` : `Couldn't send: ${data.reason || data.error || "error"}`);
+    } catch {
+      setTestMsg("Couldn't send the test.");
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -1776,19 +1845,51 @@ function EmailPreviewModal({ prospectId, onClose }: { prospectId: string; onClos
                 </button>
               )}
             </div>
-            <textarea className="input min-h-[60px] w-full text-sm" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Loved your recent case result — thought this might help." />
+            <textarea className="input min-h-[60px] w-full text-sm" value={note} onChange={(e) => setNote(e.target.value)} disabled={customHtml} placeholder="e.g. Loved your recent case result — thought this might help." />
+            {customHtml && <p className="mt-1 text-[11px] text-amber-600">Subject &amp; note don&apos;t apply while a hand-edited email is active — reset below to use them again.</p>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button onClick={save} disabled={saving} className="btn text-sm">{saving ? "Saving…" : "Save changes"}</button>
+            <button onClick={sendTest} disabled={testing} className="btn-secondary text-sm">{testing ? "Sending…" : "✉️ Send test to me"}</button>
             {savedMsg && <span className="text-xs text-emerald-600">{savedMsg}</span>}
+            {testMsg && <span className={`text-xs ${testMsg.startsWith("✓") ? "text-emerald-600" : "text-red-600"}`}>{testMsg}</span>}
           </div>
-          <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Preview</div>
+
+          {customHtml && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
+              ✏️ This lead has a hand-edited email — it sends exactly as shown below.
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+              {editingHtml ? "Editing — click in the email and type" : "Preview"}
+            </span>
+            <div className="flex items-center gap-2">
+              {editingHtml ? (
+                <>
+                  <button onClick={saveHtml} disabled={saving} className="btn px-2.5 py-1 text-[11px]">{saving ? "Saving…" : "Save email edits"}</button>
+                  <button onClick={toggleEdit} className="text-[11px] text-slate-500 hover:text-slate-800">Cancel</button>
+                </>
+              ) : (
+                <>
+                  <button onClick={toggleEdit} disabled={loading || !!error} className="text-[11px] font-medium text-brand-600 hover:underline disabled:opacity-40">✏️ Edit full email</button>
+                  {customHtml && <button onClick={resetHtml} className="text-[11px] text-slate-400 hover:underline">Reset to template</button>}
+                </>
+              )}
+            </div>
+          </div>
           {loading ? (
             <div className="py-10 text-center text-sm text-slate-500">Loading…</div>
           ) : error ? (
             <p className="text-sm text-red-600">{error}</p>
           ) : (
-            <iframe title="Email preview" srcDoc={html} className="h-[420px] w-full rounded-lg border border-slate-200" />
+            <iframe
+              ref={iframeRef}
+              title="Email preview"
+              srcDoc={html}
+              className={`h-[440px] w-full rounded-lg border ${editingHtml ? "border-brand-400 ring-2 ring-brand-100" : "border-slate-200"}`}
+            />
           )}
         </div>
       </div>

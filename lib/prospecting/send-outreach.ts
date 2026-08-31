@@ -31,8 +31,8 @@ async function sentToday(): Promise<number> {
 // preview screen render unsaved edits without persisting them first.
 export async function composeOutreachEmail(
   prospectId: string,
-  override?: { note?: string | null; subject?: string | null }
-): Promise<{ subject: string; html: string } | { error: string }> {
+  override?: { note?: string | null; subject?: string | null; ignoreHtmlOverride?: boolean }
+): Promise<{ subject: string; html: string; customHtml: boolean } | { error: string }> {
   const prospect = await prisma.prospect.findUnique({ where: { id: prospectId } });
   if (!prospect) return { error: "Not found" };
   if (!prospect.demoToken) return { error: "Generate a demo first" };
@@ -72,7 +72,12 @@ export async function composeOutreachEmail(
     subjectOverride: override && "subject" in override ? override.subject : prospect.outreachSubject,
   });
 
-  return { subject: built.subject, html: built.html };
+  // A saved full-HTML edit wins over the template (unless explicitly ignored,
+  // e.g. when the preview needs to show the underlying template to reset to).
+  if (prospect.outreachHtml && !(override && override.ignoreHtmlOverride)) {
+    return { subject: built.subject, html: prospect.outreachHtml, customHtml: true };
+  }
+  return { subject: built.subject, html: built.html, customHtml: false };
 }
 
 // Send the personalized cold email for one prospect. Enforces every guard:
