@@ -28,7 +28,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <Link href="/dashboard" className="text-base font-semibold text-slate-900">
             Hey Lily Admin
           </Link>
-          <LogoutButton />
+          <div className="flex items-center gap-4">
+            {me && (
+              <Link href="/dashboard/account" className="text-sm text-slate-500 hover:text-slate-900">
+                {me.name || me.email}
+              </Link>
+            )}
+            <LogoutButton />
+          </div>
         </div>
       </header>
       <div className="mx-auto flex max-w-none gap-8 px-6 py-8">
