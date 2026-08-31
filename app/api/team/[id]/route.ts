@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, isOwner } from "@/lib/current-user";
 
@@ -9,6 +10,7 @@ const patchSchema = z.object({
   calendlyUrl: z.string().url().optional().or(z.literal("")),
   phone: z.string().max(40).optional().or(z.literal("")),
   sendingEmail: z.string().email().optional().or(z.literal("")),
+  password: z.string().min(8).optional().or(z.literal("")),
 });
 
 // Update a teammate's profile (phone, sending address, Calendly, role). Owner-
@@ -39,6 +41,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       ...(d.calendlyUrl !== undefined ? { calendlyUrl: d.calendlyUrl || null } : {}),
       ...(d.phone !== undefined ? { phone: d.phone || null } : {}),
       ...(d.sendingEmail !== undefined ? { sendingEmail: d.sendingEmail || null } : {}),
+      ...(d.password ? { passwordHash: await bcrypt.hash(d.password, 12) } : {}),
     },
   });
 

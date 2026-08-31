@@ -127,6 +127,7 @@ function EditRow({ user, onDone, onCancel }: { user: User; onDone: () => void; o
     phone: user.phone || "",
     sendingEmail: user.sendingEmail || "",
     calendlyUrl: user.calendlyUrl || "",
+    password: "",
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,7 +155,18 @@ function EditRow({ user, onDone, onCancel }: { user: User; onDone: () => void; o
       <td className="px-4 py-3">
         <input className="input w-full text-sm" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Name" />
       </td>
-      <td className="px-4 py-3 text-slate-500">{user.email}</td>
+      <td className="px-4 py-3 align-top">
+        <div className="text-slate-500">{user.email}</div>
+        <input
+          className="input mt-1 w-full text-sm"
+          type="text"
+          autoComplete="new-password"
+          value={f.password}
+          onChange={(e) => set("password", e.target.value)}
+          placeholder="Set new password (8+ chars)"
+        />
+        <p className="mt-0.5 text-[10px] text-slate-400">Leave blank to keep current password.</p>
+      </td>
       <td className="px-4 py-3">
         <input className="input w-full text-sm" value={f.sendingEmail} onChange={(e) => set("sendingEmail", e.target.value)} placeholder="gretchen@mail.heylily.ai" />
       </td>
