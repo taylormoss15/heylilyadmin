@@ -1133,7 +1133,9 @@ function FragmentRow({
           </a>
           {r.platform && <div className="text-[11px] text-slate-400">Built on {r.platform}</div>}
         </td>
-        <td className="px-4 py-3 text-slate-600">{r.industry || <span className="text-slate-300">—</span>}</td>
+        <td className="max-w-[200px] px-4 py-3 text-slate-600">
+          {r.industry ? <span className="line-clamp-2" title={r.industry}>{r.industry}</span> : <span className="text-slate-300">—</span>}
+        </td>
         <td className="px-4 py-3 text-slate-600">{r.estimatedRevenue || <span className="text-slate-300">—</span>}</td>
         <td className="px-4 py-3 text-slate-600">{r.employees || <span className="text-slate-300">—</span>}</td>
         <td className="px-4 py-3">
