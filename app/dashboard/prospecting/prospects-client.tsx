@@ -1660,6 +1660,15 @@ function EmailPreviewModal({ prospectId, onClose }: { prospectId: string; onClos
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [meta, setMeta] = useState<{
+    from: string;
+    replyTo: string;
+    defaultSubject: string;
+    assigned: boolean;
+    ownerName: string | null;
+    ownerIsViewer: boolean;
+    viewerName: string | null;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1674,6 +1683,15 @@ function EmailPreviewModal({ prospectId, onClose }: { prospectId: string; onClos
       setHtml(data.html || "");
       setSubject(data.savedSubject || "");
       setNote(data.savedNote || "");
+      setMeta({
+        from: data.from || "",
+        replyTo: data.replyTo || "",
+        defaultSubject: data.defaultSubject || "",
+        assigned: Boolean(data.assigned),
+        ownerName: data.ownerName ?? null,
+        ownerIsViewer: Boolean(data.ownerIsViewer),
+        viewerName: data.viewerName ?? null,
+      });
     } finally {
       setLoading(false);
     }
@@ -1710,12 +1728,54 @@ function EmailPreviewModal({ prospectId, onClose }: { prospectId: string; onClos
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Close">✕</button>
         </div>
         <div className="space-y-3 p-4">
+          {/* Who it sends as, and where replies go */}
+          {meta && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                <div>
+                  <span className="font-semibold text-slate-500">Sends from</span>
+                  <div className="text-slate-800">{meta.from || <span className="text-amber-600">Assign a rep (or set OUTREACH_FROM_EMAIL)</span>}</div>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500">Replies go to</span>
+                  <div className="text-slate-800">
+                    {meta.replyTo || <span className="text-amber-600">— no rep assigned</span>}
+                    {meta.ownerIsViewer && <span className="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">that&apos;s you</span>}
+                  </div>
+                </div>
+              </div>
+              {!meta.assigned && (
+                <p className="mt-2 text-[11px] text-amber-700">This lead isn&apos;t assigned to a rep yet — assign one so it sends from their address and replies reach a real inbox.</p>
+              )}
+              {meta.assigned && !meta.ownerIsViewer && meta.ownerName && (
+                <p className="mt-2 text-[11px] text-slate-500">Assigned to {meta.ownerName} — it sends from them and replies go to their inbox.</p>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Subject</label>
-            <input className="input w-full text-sm" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Leave blank for the default subject" />
+            <input className="input w-full text-sm" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={meta?.defaultSubject || "Leave blank for the default subject"} />
+            {meta?.defaultSubject && (
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="truncate text-[11px] text-slate-400">Default: {meta.defaultSubject}</span>
+                {!subject.trim() ? (
+                  <button type="button" onClick={() => setSubject(meta.defaultSubject)} className="flex-shrink-0 text-[11px] text-brand-600 hover:underline">Edit default</button>
+                ) : (
+                  <button type="button" onClick={() => setSubject("")} className="flex-shrink-0 text-[11px] text-slate-400 hover:underline">Reset to default</button>
+                )}
+              </div>
+            )}
           </div>
           <div>
-            <label className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Personal note (optional — added at the top)</label>
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Personal note (optional — added at the top)</label>
+              {meta?.viewerName && (
+                <button type="button" onClick={() => setNote((n) => (n.trim() ? n : `Hi — ${meta.viewerName} here from Hey Lily.`))} className="text-[11px] text-brand-600 hover:underline">
+                  ＋ Insert my name
+                </button>
+              )}
+            </div>
             <textarea className="input min-h-[60px] w-full text-sm" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Loved your recent case result — thought this might help." />
           </div>
           <div className="flex items-center gap-2">
