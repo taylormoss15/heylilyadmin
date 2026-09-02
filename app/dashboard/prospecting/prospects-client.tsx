@@ -674,6 +674,24 @@ export default function ProspectsClient({
 
   const arrow = (key: SortKey) => (sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "");
 
+  // Why queued leads aren't all sendable — approving alone isn't enough; a lead
+  // must also have an assigned rep and a valid contact email.
+  const queuedStats = useMemo(() => {
+    const queued = visible.filter((r) => stageOf(r) === "queued");
+    let unassigned = 0;
+    let noEmail = 0;
+    let invalid = 0;
+    let unsub = 0;
+    for (const r of queued) {
+      if (!r.ownerId) unassigned++;
+      else if (!r.hasEmail) noEmail++;
+      else if (r.emailInvalid) invalid++;
+      else if (r.unsubscribed) unsub++;
+    }
+    return { total: queued.length, ready: queued.filter(isReady).length, unassigned, noEmail, invalid, unsub };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, currentUser]);
+
   // Server-side env checks surfaced so the owner isn't guessing whether sending
   // is fully configured. COMPANY_ADDRESS is a legal (CAN-SPAM) requirement.
   const configWarnings: string[] = [];
@@ -792,9 +810,14 @@ export default function ProspectsClient({
           )}
           {stageFilter === "review" && <span className="text-sm text-slate-500">Open each lead → preview the site → Approve &amp; queue or Reject.</span>}
           {stageFilter === "queued" && (
-            <button onClick={sendOutreachBulk} disabled={sending || visible.filter(isReady).length === 0} className="btn text-sm">
-              {sending ? "Sending…" : `✉️ Send outreach (${visible.filter(isReady).length})`}
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={sendOutreachBulk} disabled={sending || queuedStats.ready === 0} className="btn text-sm">
+                {sending ? "Sending…" : `✉️ Send outreach now (${queuedStats.ready})`}
+              </button>
+              <span className="text-xs text-slate-500">
+                Emails don&apos;t send on their own — click to send the ready ones.
+              </span>
+            </div>
           )}
           {stageFilter === "sent" && <span className="text-sm text-slate-500">These leads have been emailed. Booked demos show 🔥.</span>}
           {!stageFilter && <span className="text-sm text-slate-500">Pick a step above to work that stage — or add leads to start.</span>}
@@ -806,6 +829,26 @@ export default function ProspectsClient({
               {configWarnings.map((w) => (
                 <li key={w}>{w}</li>
               ))}
+            </ul>
+          </div>
+        )}
+        {stageFilter === "queued" && queuedStats.total > queuedStats.ready && (
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <span className="font-semibold text-slate-800">{queuedStats.ready} of {queuedStats.total} queued are ready to send.</span>{" "}
+            The rest are blocked:
+            <ul className="mt-1 list-disc space-y-0.5 pl-4">
+              {queuedStats.unassigned > 0 && (
+                <li><strong>{queuedStats.unassigned}</strong> not assigned to a rep — use “Distribute unassigned” or assign them, then they can send.</li>
+              )}
+              {queuedStats.noEmail > 0 && (
+                <li><strong>{queuedStats.noEmail}</strong> have no contact email — add one in the lead’s Details.</li>
+              )}
+              {queuedStats.invalid > 0 && (
+                <li><strong>{queuedStats.invalid}</strong> have an email flagged invalid/undeliverable — skipped to protect your domain.</li>
+              )}
+              {queuedStats.unsub > 0 && (
+                <li><strong>{queuedStats.unsub}</strong> unsubscribed — permanently suppressed.</li>
+              )}
             </ul>
           </div>
         )}
