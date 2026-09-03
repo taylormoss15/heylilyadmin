@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface Teaser {
   ref: string;
@@ -27,9 +27,9 @@ function band(score: number | null, seo = false): { label: string; color: string
 
 type Phase = "idle" | "scanning" | "teaser" | "revealed" | "declined";
 
-export default function ScanApp({ ctaUrl }: { ctaUrl: string }) {
+export default function ScanApp({ ctaUrl, initialUrl = "" }: { ctaUrl: string; initialUrl?: string }) {
   const [phase, setPhase] = useState<Phase>("idle");
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialUrl);
   const [error, setError] = useState<string | null>(null);
   const [teaser, setTeaser] = useState<Teaser | null>(null);
 
@@ -38,16 +38,16 @@ export default function ScanApp({ ctaUrl }: { ctaUrl: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [issues, setIssues] = useState<string[]>([]);
 
-  async function runScan(e: React.FormEvent) {
-    e.preventDefault();
-    if (!url.trim()) return;
+  async function doScan(target: string) {
+    const clean = target.trim();
+    if (!clean) return;
     setPhase("scanning");
     setError(null);
     try {
       const res = await fetch("/api/public/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: clean }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -62,6 +62,22 @@ export default function ScanApp({ ctaUrl }: { ctaUrl: string }) {
       setPhase("idle");
     }
   }
+
+  function runScan(e: React.FormEvent) {
+    e.preventDefault();
+    doScan(url);
+  }
+
+  // Auto-run once when arriving from the homepage with ?url=… so the visitor
+  // lands straight on their scanning result instead of re-typing.
+  const autoRan = useRef(false);
+  useEffect(() => {
+    if (initialUrl && !autoRan.current) {
+      autoRan.current = true;
+      doScan(initialUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialUrl]);
 
   async function submitLead(e: React.FormEvent) {
     e.preventDefault();
