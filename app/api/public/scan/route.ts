@@ -107,10 +107,21 @@ export async function POST(request: NextRequest) {
   }
   const minorA11y = Math.max(0, prospect.violationCount - prospect.seriousCount);
 
+  const trustBreakdown = (() => {
+    try {
+      return prospect.trustBreakdown ? JSON.parse(prospect.trustBreakdown) : null;
+    } catch {
+      return null;
+    }
+  })();
+
   return NextResponse.json({
     ref: prospect.id,
     businessName: prospect.businessName,
     url: prospect.url,
+    // The Digital Trust Score is the headline number — the SAME score the demo
+    // and report show (both computed by computeTrustScore and stored here).
+    trust: { score: prospect.trustScore, pillars: trustBreakdown?.pillars ?? null, band: trustBreakdown?.band ?? null },
     compliance: { score: prospect.score, serious: prospect.seriousCount, total: prospect.violationCount },
     seo: { score: prospect.aeoScore },
     platform: prospect.platform,

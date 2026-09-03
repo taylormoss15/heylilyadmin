@@ -6,10 +6,21 @@ interface Teaser {
   ref: string;
   businessName: string | null;
   url: string;
+  trust: { score: number | null; band: { label: string; tone: string } | null; pillars: unknown };
   compliance: { score: number | null; serious: number; total: number };
   seo: { score: number | null };
   platform: string | null;
   buckets: { critical: number; warnings: number; passed: number };
+}
+
+// The Digital Trust Score band — mirrors trustBand() so the /scan headline reads
+// the same as the homepage and the demo/report.
+function trustColor(score: number | null): string {
+  if (score === null) return "#64748b";
+  if (score >= 85) return "#059669";
+  if (score >= 70) return "#65a30d";
+  if (score >= 55) return "#d97706";
+  return "#dc2626";
 }
 
 function band(score: number | null, seo = false): { label: string; color: string } {
@@ -157,7 +168,25 @@ export default function ScanApp({ ctaUrl, initialUrl = "" }: { ctaUrl: string; i
             <h1 className="text-2xl font-bold">Here&apos;s how {teaser.businessName || teaser.url} scored</h1>
             <p className="text-sm text-slate-500">{teaser.url}{teaser.platform ? ` · built on ${teaser.platform}` : ""}</p>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {/* Headline: the Digital Trust Score — the SAME number the demo & report show */}
+            <div className="mt-5 flex items-center gap-5 rounded-2xl border p-5" style={{ borderColor: trustColor(teaser.trust.score) }}>
+              <div className="text-center">
+                <div className="text-5xl font-extrabold leading-none" style={{ color: trustColor(teaser.trust.score) }}>
+                  {teaser.trust.score ?? "—"}
+                  <span className="text-lg font-semibold text-slate-400">/100</span>
+                </div>
+                <div className="mt-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: trustColor(teaser.trust.score) }}>
+                  {teaser.trust.band?.label ?? "Digital Trust"}
+                </div>
+              </div>
+              <div className="text-sm text-slate-600">
+                <div className="font-semibold text-slate-800">Your Digital Trust Score</div>
+                <p className="mt-1">One number across compliance, search, and AI readiness — the same score we track as we improve your site.</p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">What&apos;s behind your score</p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
               <ScoreTile cap="Compliance" score={teaser.compliance.score} band={cb} />
               <ScoreTile cap="Search / SEO" score={teaser.seo.score} band={sb} />
             </div>

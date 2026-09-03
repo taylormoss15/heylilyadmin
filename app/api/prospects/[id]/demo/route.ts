@@ -62,10 +62,11 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
   const issues = outcomeIssues(imported.scan.violations);
 
   // Digital Trust Score, before → projected after — both computed with the
-  // same engine so 62 → 92 is a real comparison. "Before" from the live site's
-  // HTML; "after" from the finalized redesign (compliance is a clean 100).
-  const beforeTrust = (() => {
-    if (!imported.html) return prospect.trustScore ?? null;
+  // same engine so 62 → 92 is a real comparison. "Before" reuses the prospect's
+  // stored score (the exact number they saw on the homepage/free scan) so it's
+  // identical end-to-end; only if there's no stored score do we compute it fresh.
+  const beforeTrust = prospect.trustScore ?? (() => {
+    if (!imported.html) return null;
     const aeo = computeAeo(analyzeHtmlSignals(imported.html, prospect.url), prospect.url);
     return computeTrustScore({
       accessibilityScore: imported.scan.score,
