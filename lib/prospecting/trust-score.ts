@@ -35,7 +35,7 @@ export interface TrustScore {
 // Which on-page checks belong to which pillar (by their label in aeo.ts).
 const SEO_CHECKS = ["Title tag", "Meta description", "Single clear H1", "Indexable by search", "Meaningful content"];
 const AEO_CHECKS = ["Structured data (schema)", "Social share tags (Open Graph)"];
-const EXPERIENCE_CHECKS = ["Mobile-friendly viewport", "Secure (HTTPS)", "Image alt text", "Analytics installed"];
+const EXPERIENCE_CHECKS = ["Mobile-friendly viewport", "Secure (HTTPS)", "Image alt text", "Business hours published", "Business address published"];
 
 function pctPassing(checks: AeoCheck[], labels: string[]): number {
   const relevant = checks.filter((c) => labels.includes(c.label));

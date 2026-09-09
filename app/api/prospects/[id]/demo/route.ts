@@ -8,6 +8,7 @@ import { outcomeIssues } from "@/lib/prospecting/issues";
 import { analyzeHtmlSignals } from "@/lib/prospecting/html-signals";
 import { computeAeo } from "@/lib/prospecting/aeo";
 import { computeTrustScore } from "@/lib/prospecting/trust-score";
+import { scanProspect } from "@/lib/prospecting/scan";
 import { screenshotHtml } from "@/lib/site/screenshot";
 
 export const dynamic = "force-dynamic";
@@ -78,19 +79,13 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     }).score;
   })();
 
-  // The honest, computed Trust Score of the site we actually build — clean
-  // compliance, full SEO + schema + Open Graph, mobile, HTTPS, alt text. It
-  // genuinely lands in the mid-90s; no fudging.
-  const afterTrust = (() => {
-    if (!redesignHtml) return null;
-    const aeo = computeAeo(analyzeHtmlSignals(redesignHtml, "https://preview.heylily.ai"), "https://preview.heylily.ai");
-    return computeTrustScore({
-      accessibilityScore: afterScore ?? 100,
-      violationCount: 0,
-      seriousCount: 0,
-      aeoChecks: aeo.checks,
-    }).score;
-  })();
+  // The "after" score runs the finalized site through the EXACT same scan
+  // engine as the public lead-magnet scanner (scanProspect). So the number we
+  // sell is byte-for-byte the number a prospect gets if they run their new site
+  // through "score my site" once it's live — guaranteed, not approximated.
+  const afterTrust = redesignHtml
+    ? (await scanProspect(prospect.url, { html: redesignHtml, scoreOnly: true })).trust.score
+    : null;
 
   // Capture an "after" screenshot of the redesign for the outreach before/after.
   const afterShot = redesignHtml ? await screenshotHtml(redesignHtml) : null;

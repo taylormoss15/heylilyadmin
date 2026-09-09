@@ -63,6 +63,17 @@ export function analyzeHtmlSignals(html: string, url: string): TechSignals {
 
   const hasAnalytics = /gtag\(|googletagmanager|google-analytics|fbq\(|clarity\.ms|hotjar/i.test(lower);
   const hasWpContent = /\/wp-(content|includes)\//i.test(lower);
+  const ldText = (html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || []).join(" ");
+  const hasAddress =
+    /<address[\s>]/i.test(html) ||
+    /"address"\s*:/i.test(ldText) ||
+    /\b\d{1,6}\s+[A-Za-z0-9.'\- ]+\b(street|st|avenue|ave|road|rd|blvd|boulevard|drive|dr|lane|ln|suite|ste|way|court|ct|hwy|highway|pkwy|parkway)\b/i.test(text) ||
+    /\b[A-Z][a-z]+,\s*[A-Z]{2}\s*\d{5}\b/.test(text);
+  const hasHours =
+    /openinghours/i.test(ldText) ||
+    /\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b[\s:.\-–]*\d{1,2}(:\d{2})?\s*(am|pm)/i.test(text) ||
+    /\bhours?\b[\s\S]{0,60}\d{1,2}\s*(:\d{2})?\s*(am|pm)/i.test(text) ||
+    /\bopen\b[\s\S]{0,40}\d{1,2}\s*(:\d{2})?\s*(am|pm)/i.test(text);
 
   return {
     generator,
@@ -83,6 +94,8 @@ export function analyzeHtmlSignals(html: string, url: string): TechSignals {
     jsonLdTypes,
     words,
     hasAnalytics,
+    hasAddress,
+    hasHours,
     hasWpContent,
     hosts: [],
     credit: "",

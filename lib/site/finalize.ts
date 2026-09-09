@@ -53,11 +53,10 @@ export function finalizeCustomHtml(rawHtml: string, opts: FinalizeOptions): stri
     headBits.push(`<meta name="twitter:card" content="summary_large_image">`);
   }
   // Open Graph image — required for the "social share" signal and for links to
-  // render with a preview. Prefer the page's own hero image; fall back to the
-  // Hey Lily cover. Only add if the page doesn't already declare one.
+  // render with a preview. Prefer a photo of people (the providers/team build
+  // the most trust), then any real hero image, then the Hey Lily cover.
   if (!/property=["']og:image["']/i.test(html)) {
-    const firstImg = (html.match(/<img\b[^>]*\bsrc=["'](https?:\/\/[^"']+)["']/i) || [])[1];
-    const ogImage = firstImg || `${adminBaseUrl}/og-cover.png`;
+    const ogImage = pickOgImage(html) || `${adminBaseUrl}/og-cover.png`;
     headBits.push(`<meta property="og:image" content="${escAttr(ogImage)}">`);
   }
   if (headBits.length) {
@@ -92,4 +91,24 @@ export function finalizeCustomHtml(rawHtml: string, opts: FinalizeOptions): stri
 function insertBefore(html: string, marker: RegExp, snippet: string): string | null {
   if (!marker.test(html)) return null;
   return html.replace(marker, `${snippet}\n$&`);
+}
+
+// Choose the best Open Graph image from the page's own <img> tags. A photo of
+// the people/providers earns the most trust when a link is shared, so score
+// each image by whether its alt/src suggests a person, then fall back to the
+// first real hero image.
+const PEOPLE_HINTS = /team|staff|attorney|lawyer|doctor|dentist|provider|physician|portrait|headshot|owner|founder|meet|people|person|professional|associate|our-team|about-us|dr[-_.]|\bmd\b|esq/i;
+function pickOgImage(html: string): string | null {
+  const imgs = html.match(/<img\b[^>]*>/gi) || [];
+  let firstReal: string | null = null;
+  let peopleShot: string | null = null;
+  for (const tag of imgs) {
+    const src = (tag.match(/\bsrc=["'](https?:\/\/[^"']+)["']/i) || [])[1];
+    if (!src) continue;
+    if (/sprite|icon|logo|favicon|badge|placeholder|1x1|pixel|blank/i.test(src)) continue;
+    if (!firstReal) firstReal = src;
+    const alt = (tag.match(/\balt=["']([^"']*)["']/i) || [])[1] || "";
+    if (!peopleShot && (PEOPLE_HINTS.test(alt) || PEOPLE_HINTS.test(src))) peopleShot = src;
+  }
+  return peopleShot || firstReal;
 }

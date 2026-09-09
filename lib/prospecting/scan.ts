@@ -49,7 +49,7 @@ function launchBrowser() {
   return chromium.launch({ headless: true, executablePath });
 }
 
-export async function scanProspect(url: string, opts?: { html?: string }): Promise<ProspectScrape> {
+export async function scanProspect(url: string, opts?: { html?: string; scoreOnly?: boolean }): Promise<ProspectScrape> {
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
@@ -125,8 +125,26 @@ export async function scanProspect(url: string, opts?: { html?: string }): Promi
 
       const words = bodyText.split(/\s+/).filter(Boolean).length;
 
+      // Customer-facing trust signals: is a real address and opening hours
+      // published? Check visible text, an <address> tag, and LocalBusiness JSON-LD.
+      const ldText = Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
+        .map((s) => s.textContent || "")
+        .join(" ");
+      const hasAddress =
+        !!document.querySelector("address") ||
+        /"address"\s*:/i.test(ldText) ||
+        /\b\d{1,6}\s+[A-Za-z0-9.'\- ]+\b(street|st|avenue|ave|road|rd|blvd|boulevard|drive|dr|lane|ln|suite|ste|way|court|ct|hwy|highway|pkwy|parkway)\b/i.test(bodyText) ||
+        /\b[A-Z][a-z]+,\s*[A-Z]{2}\s*\d{5}\b/.test(bodyText);
+      const hasHours =
+        /openinghours/i.test(ldText) ||
+        /\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b[\s:.\-–]*\d{1,2}(:\d{2})?\s*(am|pm)/i.test(bodyText) ||
+        /\bhours?\b[\s\S]{0,60}\d{1,2}\s*(:\d{2})?\s*(am|pm)/i.test(bodyText) ||
+        /\bopen\b[\s\S]{0,40}\d{1,2}\s*(:\d{2})?\s*(am|pm)/i.test(bodyText);
+
       return {
         title: document.title || "",
+        hasAddress,
+        hasHours,
         metaName,
         metaDesc,
         h1,
@@ -158,13 +176,16 @@ export async function scanProspect(url: string, opts?: { html?: string }): Promi
     const scan = await scanOpenPage(page);
 
     // Small screenshot for the AI's professionalism judgment (viewport only).
+    // Skipped in scoreOnly mode (used to score our own redesign — no AI needed).
     let screenshot: string | undefined;
-    try {
-      await page.setViewportSize({ width: 1024, height: 768 });
-      const buf = await page.screenshot({ type: "jpeg", quality: 45 });
-      screenshot = `data:image/jpeg;base64,${buf.toString("base64")}`;
-    } catch {
-      screenshot = undefined;
+    if (!opts?.scoreOnly) {
+      try {
+        await page.setViewportSize({ width: 1024, height: 768 });
+        const buf = await page.screenshot({ type: "jpeg", quality: 45 });
+        screenshot = `data:image/jpeg;base64,${buf.toString("base64")}`;
+      } catch {
+        screenshot = undefined;
+      }
     }
 
     // Is this a real, working site? Detect 404s / parked / under-construction
@@ -194,6 +215,8 @@ export async function scanProspect(url: string, opts?: { html?: string }): Promi
       jsonLdTypes: raw.jsonLdTypes,
       words: raw.words,
       hasAnalytics: raw.hasAnalytics,
+      hasAddress: raw.hasAddress,
+      hasHours: raw.hasHours,
       hasWpContent: raw.hasWpContent,
       hosts: raw.hosts,
       credit: raw.credit,
@@ -208,14 +231,17 @@ export async function scanProspect(url: string, opts?: { html?: string }): Promi
     });
 
     // Best-effort AI enrichment: industry, size, professionalism, who built it.
-    const profile = await inferProspectProfile({
-      businessName,
-      url,
-      text: [raw.title, raw.metaDesc, raw.h1, raw.bodyText].filter(Boolean).join("\n"),
-      screenshot,
-      platformHint: platform,
-      creditHint: raw.credit || undefined,
-    });
+    // Skipped in scoreOnly mode (scoring our own redesign — no enrichment needed).
+    const profile = opts?.scoreOnly
+      ? { industry: undefined, employees: undefined, estimatedRevenue: undefined, builtBy: undefined, professionalism: undefined, professionalismNote: undefined }
+      : await inferProspectProfile({
+          businessName,
+          url,
+          text: [raw.title, raw.metaDesc, raw.h1, raw.bodyText].filter(Boolean).join("\n"),
+          screenshot,
+          platformHint: platform,
+          creditHint: raw.credit || undefined,
+        });
 
     return {
       businessName,

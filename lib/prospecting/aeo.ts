@@ -21,6 +21,8 @@ export interface TechSignals {
   jsonLdTypes: string[];
   words: number;
   hasAnalytics: boolean;
+  hasAddress: boolean; // a real business address is published (customer-facing trust)
+  hasHours: boolean; // opening hours are published (customer-facing trust)
   hasWpContent: boolean;
   hosts: string[];
   credit: string; // "powered by / website by …" phrase, if any
@@ -142,9 +144,14 @@ export function computeAeo(t: TechSignals, url: string): AeoResult {
       detail: `${t.words} words${t.words < 250 ? " (thin)" : ""}`,
     },
     {
-      label: "Analytics installed",
-      pass: t.hasAnalytics,
-      detail: t.hasAnalytics ? "Yes" : "None detected — they're flying blind on traffic",
+      label: "Business hours published",
+      pass: t.hasHours,
+      detail: t.hasHours ? "Listed" : "Not found — customers & AI can't tell when you're open",
+    },
+    {
+      label: "Business address published",
+      pass: t.hasAddress,
+      detail: t.hasAddress ? "Listed" : "Not found — hurts local search and looks less credible",
     },
   ];
 
