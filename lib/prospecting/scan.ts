@@ -49,12 +49,20 @@ function launchBrowser() {
   return chromium.launch({ headless: true, executablePath });
 }
 
-export async function scanProspect(url: string): Promise<ProspectScrape> {
+export async function scanProspect(url: string, opts?: { html?: string }): Promise<ProspectScrape> {
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
-    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
-    const httpStatus = response?.status() ?? 0;
+    // When HTML is supplied (from the rep's browser bookmarklet, for sites that
+    // block our bots), score that captured DOM instead of fetching the URL —
+    // so a Cloudflare-protected site can still be scanned by a human's session.
+    let httpStatus = 200;
+    if (opts?.html) {
+      await page.setContent(opts.html, { waitUntil: "domcontentloaded", timeout: 30000 });
+    } else {
+      const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+      httpStatus = response?.status() ?? 0;
+    }
 
     // Self-contained (runs in the page context) — no outer refs / named helpers.
     const raw = await page.evaluate(() => {
