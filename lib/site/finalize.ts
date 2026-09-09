@@ -52,12 +52,13 @@ export function finalizeCustomHtml(rawHtml: string, opts: FinalizeOptions): stri
     if (desc) headBits.push(`<meta property="og:description" content="${escAttr(desc)}">`);
     headBits.push(`<meta name="twitter:card" content="summary_large_image">`);
   }
-  // Open Graph image — required for the "social share" signal and for links to
-  // render with a preview. Prefer a photo of people (the providers/team build
-  // the most trust), then any real hero image, then the Hey Lily cover.
+  // Open Graph image — the preview picture when the site's link is shared.
+  // Always the business's OWN image: a photo of the people/providers if we can
+  // find one, else their best hero image. Never any Hey Lily branding — if the
+  // page has no usable image, we simply omit the tag rather than brand it.
   if (!/property=["']og:image["']/i.test(html)) {
-    const ogImage = pickOgImage(html) || `${adminBaseUrl}/og-cover.png`;
-    headBits.push(`<meta property="og:image" content="${escAttr(ogImage)}">`);
+    const ogImage = pickOgImage(html);
+    if (ogImage) headBits.push(`<meta property="og:image" content="${escAttr(ogImage)}">`);
   }
   if (headBits.length) {
     const block = headBits.join("\n");

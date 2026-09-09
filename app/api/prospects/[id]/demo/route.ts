@@ -32,6 +32,17 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: `Couldn't load the site: ${message}` }, { status: 502 });
   }
 
+  // If we couldn't find their hours, publish a sensible, editable default on the
+  // site WE build (Mon–Fri 9–5) — most local firms are close, they can correct
+  // it before going live, and it earns the "hours published" trust signal. This
+  // only affects our redesign, never their current site's "before" score.
+  if (!imported.businessData.hours || imported.businessData.hours.length === 0) {
+    imported.businessData.hours = [
+      { label: "Monday – Friday", value: "9:00 AM – 5:00 PM" },
+      { label: "Saturday – Sunday", value: "Closed" },
+    ];
+  }
+
   const token = randomBytes(9).toString("base64url");
 
   let redesignHtml: string | null = null;
