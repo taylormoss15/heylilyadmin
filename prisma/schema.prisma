@@ -51,6 +51,7 @@ model Prospect {
 
   scanStatus     String  @default("PENDING") // PENDING | COMPLETED | FAILED
   scanError      String?
+  siteStatus     String? // ok | dead (404/parked/under-construction) | blocked (bot challenge)
   score          Float? // 0-100 accessibility score (higher = safer)
   violationCount Int     @default(0)
   seriousCount   Int     @default(0)

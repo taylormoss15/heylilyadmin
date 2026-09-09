@@ -54,6 +54,7 @@ export interface ProspectRow {
   notes: string | null;
   scanStatus: string;
   scanError: string | null;
+  siteStatus: string | null;
   score: number | null;
   violationCount: number;
   seriousCount: number;
@@ -1147,6 +1148,22 @@ function FragmentRow({
               🔥 Demo booked{r.bookedWith ? ` · ${r.bookedWith}` : ""}
             </div>
           )}
+          {r.siteStatus === "dead" && (
+            <div
+              title="This domain has no working website (404 / parked / under construction). Perfect for the 'we already built your new site — want to activate it?' pitch."
+              className="mt-0.5 inline-block rounded bg-fuchsia-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-fuchsia-700"
+            >
+              🏗 No active website
+            </div>
+          )}
+          {r.siteStatus === "blocked" && (
+            <div
+              title="A bot blocker (e.g. Cloudflare) stopped the automated scan — the score may be unreliable. A rep can run it manually."
+              className="mt-0.5 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700"
+            >
+              🛡 Bot-blocked
+            </div>
+          )}
           {r.emailInvalid && (
             <div
               title="This address was flagged invalid/undeliverable in the list — it'll be skipped when sending to protect your domain reputation."
@@ -1462,6 +1479,18 @@ function DetailsPanel({
           {scanning ? "Scanning…" : r.scanStatus === "COMPLETED" ? "Re-scan" : "Scan now"}
         </button>
 
+        {r.siteStatus === "dead" && (
+          <div className="rounded-lg border border-fuchsia-200 bg-fuchsia-50 p-3 text-xs text-fuchsia-900">
+            <p className="font-semibold">🏗 No active website detected</p>
+            <p className="mt-1">This domain is a 404 / parked / under-construction page. Generate the demo below, then pitch: <em>“We noticed you don’t have an active website — we already built one for you. Want to activate it on your domain?”</em> (Double-check the domain first — if it’s wrong, fix it above and re-scan.)</p>
+          </div>
+        )}
+        {r.siteStatus === "blocked" && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            <p className="font-semibold">🛡 A bot blocker stopped the automated scan</p>
+            <p className="mt-1">Cloudflare (or similar) blocked our scanner, so the score may be unreliable. A rep can open the site in a normal browser and run the scan manually — or you can enter the score by hand.</p>
+          </div>
+        )}
         <DemoBlock prospectId={r.id} demoToken={r.demoToken} onGenerated={(t) => onPatch({ demoToken: t })} />
 
         {/* Outreach — review the preview, approve/reject, then it joins the send queue. */}
@@ -2137,6 +2166,7 @@ function toRow(p: {
   notes: string | null;
   scanStatus: string;
   scanError: string | null;
+  siteStatus: string | null;
   score: number | null;
   violationCount: number;
   seriousCount: number;
@@ -2179,6 +2209,7 @@ function toRow(p: {
     notes: p.notes,
     scanStatus: p.scanStatus,
     scanError: p.scanError,
+    siteStatus: p.siteStatus ?? null,
     score: p.score,
     violationCount: p.violationCount,
     seriousCount: p.seriousCount,

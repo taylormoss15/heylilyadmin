@@ -24,6 +24,7 @@ export interface ProspectScrape {
   aeoChecks?: AeoCheck[];
   trust: TrustScore;
   scan: ScanSummary;
+  siteStatus?: "ok" | "dead" | "blocked";
 }
 
 export function normalizeProspectUrl(input: string): string {
@@ -52,7 +53,8 @@ export async function scanProspect(url: string): Promise<ProspectScrape> {
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    const httpStatus = response?.status() ?? 0;
 
     // Self-contained (runs in the page context) — no outer refs / named helpers.
     const raw = await page.evaluate(() => {
@@ -157,6 +159,11 @@ export async function scanProspect(url: string): Promise<ProspectScrape> {
       screenshot = undefined;
     }
 
+    // Is this a real, working site? Detect 404s / parked / under-construction
+    // pages (a big opportunity — "you don't have an active site, we built one")
+    // vs. a bot challenge (Cloudflare etc.) that blocked the scan itself.
+    const siteStatus = detectSiteStatus(httpStatus, raw.title, raw.bodyText, raw.words);
+
     const nameRaw = raw.metaName || raw.title || raw.h1 || "";
     const businessName = nameRaw.split(/\s[|–—-]\s/)[0].trim().slice(0, 80) || undefined;
 
@@ -217,8 +224,28 @@ export async function scanProspect(url: string): Promise<ProspectScrape> {
       aeoChecks: aeo.checks,
       trust,
       scan,
+      siteStatus,
     };
   } finally {
     await browser.close();
   }
+}
+
+// Classify what we actually loaded: "blocked" = a bot challenge (Cloudflare /
+// captcha) so the scan is unreliable; "dead" = a 404, parked, suspended, or
+// under-construction page (no real website); "ok" = a genuine site.
+function detectSiteStatus(status: number, title: string, body: string, words: number): "ok" | "dead" | "blocked" {
+  const t = `${title} ${body}`.toLowerCase();
+
+  const blocked =
+    /just a moment|checking your browser|attention required|verify you are (a )?human|cf-browser-verification|please enable (cookies|javascript)|access denied|ddos protection by|cloudflare/i.test(t) ||
+    status === 403 || status === 429 || status === 503;
+  if (blocked) return "blocked";
+
+  const parked =
+    /this domain (is|may be) for sale|buy this domain|domain( name)? is parked|parked (free|domain)|future home of|under construction|coming soon|site not published|account suspended|website expired|default web page|welcome to nginx|apache2 (ubuntu|debian) default|index of \/|godaddy|hugedomains|sedo|this site can.?t be reached|page not found|404 not found|error 404|not found on this server/i.test(t);
+  const emptyish = words < 12 && !/\b(services?|contact|about|call|book|schedule|attorney|clinic|repair|law|dental)\b/i.test(t);
+
+  if (status >= 400 || parked || emptyish) return "dead";
+  return "ok";
 }

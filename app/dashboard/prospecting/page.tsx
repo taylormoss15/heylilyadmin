@@ -65,6 +65,7 @@ export default async function ProspectingPage() {
     notes: p.notes,
     scanStatus: p.scanStatus,
     scanError: p.scanError,
+    siteStatus: p.siteStatus,
     score: p.score,
     violationCount: p.violationCount,
     seriousCount: p.seriousCount,
