@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { signInsightToken } from "@/lib/insights/token";
 import { TIER_CONFIG } from "@/lib/tier-config";
 import type { Tier } from "@/lib/types";
 import { computeImplementation } from "@/lib/onboarding";
@@ -41,6 +42,15 @@ export default async function ClientOverviewPage({ params }: { params: { id: str
     hasMonitorScan: Boolean(monitorScan),
     monitorClean: Boolean(monitorScan && monitorScan.status === "COMPLETED" && monitorScan.violationCount === 0),
   });
+
+  // Website analytics (last 30 days) + a link to the client-facing report the
+  // monthly email sends — so we can track account health at a glance.
+  const since30 = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+  const metrics30 = await prisma.siteMetric.findMany({ where: { clientId: client.id, date: { gte: since30 } } });
+  const visits30 = metrics30.reduce((n, m) => n + m.pageviews, 0);
+  const taps30 = metrics30.reduce((n, m) => n + m.telTaps, 0);
+  const forms30 = metrics30.reduce((n, m) => n + m.formFills, 0);
+  const insightsUrl = `/insights/${signInsightToken(client.id)}`;
 
   const base = `/dashboard/clients/${client.id}`;
   const lastScan = client.accessibilityScans[0];
@@ -89,6 +99,30 @@ export default async function ClientOverviewPage({ params }: { params: { id: str
           {TIER_CONFIG[client.tier as Tier].monthlyPriceUsd}/mo)
           {client.ghlLocationId && <> · GHL location {client.ghlLocationId}</>}
         </p>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-slate-900">Website performance · last 30 days</h2>
+          <a href={insightsUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-brand-600 hover:underline">
+            See last month&apos;s report (client view) →
+          </a>
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          {[
+            { n: visits30, label: "Website visits" },
+            { n: taps30, label: "Calls tapped" },
+            { n: forms30, label: "Contact forms" },
+          ].map((s) => (
+            <div key={s.label}>
+              <div className="text-3xl font-extrabold text-slate-900">{s.n.toLocaleString()}</div>
+              <div className="text-xs font-medium text-slate-500">{s.label}</div>
+            </div>
+          ))}
+        </div>
+        {visits30 + taps30 + forms30 === 0 && (
+          <p className="mt-3 text-xs text-slate-400">No data yet — the tracking beacon reports once this client&apos;s site is live and getting visitors.</p>
+        )}
       </div>
 
       {openIncident && (
