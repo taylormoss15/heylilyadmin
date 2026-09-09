@@ -74,6 +74,15 @@ model Prospect {
   emailedAt      DateTime? // when the outreach email was sent
   unsubscribedAt DateTime? // suppresses all future sends
 
+  // Email engagement, updated from Resend webhooks so reps chase the hot leads.
+  outreachMessageId String?   // Resend email id, to correlate webhook events
+  deliveredAt       DateTime?
+  openedAt          DateTime? // first open
+  openCount         Int       @default(0)
+  clickedAt         DateTime? // first click
+  clickCount        Int       @default(0)
+  bouncedAt         DateTime?
+
   // Site intelligence gathered in the same quick scan.
   platform           String? // detected builder/CMS (Wix, WordPress, GoDaddy, Squarespace…)
   builtBy            String? // "powered by / website by" credit found on the page
@@ -328,6 +337,7 @@ model AdminUser {
   calendlyUrl  String? // this rep's booking link, used for their demos
   phone        String? // this rep's direct phone, shown in their outreach signature
   sendingEmail String? // this rep's cold-outreach from-address, e.g. gretchen@mail.heylily.ai
+  captureToken String?  @unique // personal token for the browser bookmarklet scanner
   createdAt    DateTime @default(now())
 }
 

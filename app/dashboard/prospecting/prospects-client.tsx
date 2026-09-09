@@ -79,6 +79,10 @@ export interface ProspectRow {
   bookedWith: string | null;
   emailed: boolean;
   unsubscribed: boolean;
+  delivered: boolean;
+  openCount: number;
+  clickCount: number;
+  bounced: boolean;
   hasEmail: boolean;
   emailInvalid: boolean;
   reviewStatus: string;
@@ -315,6 +319,7 @@ export default function ProspectsClient({
   const [query, setQuery] = useState("");
   const [showDismissed, setShowDismissed] = useState(false);
   const [bookedOnly, setBookedOnly] = useState(false);
+  const [engagedOnly, setEngagedOnly] = useState(false);
   const [distributing, setDistributing] = useState(false);
   // Reps land on their own leads; owners see everything.
   const [ownerFilter, setOwnerFilter] = useState<"mine" | "unassigned" | "all">(
@@ -627,6 +632,7 @@ export default function ProspectsClient({
       if (ownerFilter === "mine" && r.ownerId !== currentUser?.id) return false;
       if (ownerFilter === "unassigned" && r.ownerId) return false;
       if (bookedOnly && !r.demoBooked) return false;
+      if (engagedOnly && r.openCount === 0 && r.clickCount === 0) return false;
       if (stageFilter && stageOf(r) !== stageFilter) return false;
       if (reviewOnly && !(r.demoToken && r.reviewStatus === "PENDING" && !r.emailed)) return false;
       if (q && !`${r.businessName ?? ""} ${r.url} ${r.industry ?? ""}`.toLowerCase().includes(q)) return false;
@@ -645,7 +651,7 @@ export default function ProspectsClient({
       const bv = (b[sortKey] ?? "").toString().toLowerCase();
       return av.localeCompare(bv) * dir;
     });
-  }, [rows, query, showDismissed, sortKey, sortDir, ownerFilter, bookedOnly, reviewOnly, stageFilter, currentUser?.id]);
+  }, [rows, query, showDismissed, sortKey, sortDir, ownerFilter, bookedOnly, engagedOnly, reviewOnly, stageFilter, currentUser?.id]);
 
   const pendingCount = rows.filter((r) => r.status === "PROSPECT" && r.scanStatus !== "COMPLETED").length;
 
@@ -921,6 +927,10 @@ export default function ProspectsClient({
           <input type="checkbox" checked={bookedOnly} onChange={(e) => setBookedOnly(e.target.checked)} />
           🔥 Booked only
         </label>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" checked={engagedOnly} onChange={(e) => setEngagedOnly(e.target.checked)} />
+          👁 Opened / clicked
+        </label>
         <label className="btn-secondary cursor-pointer text-sm">
           {importing ? "Reading…" : "Upload list"}
           <input
@@ -1177,8 +1187,16 @@ function FragmentRow({
               Unsubscribed
             </div>
           ) : r.emailed ? (
-            <div className="mt-0.5 inline-block rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
-              ✉️ Emailed
+            <div className="mt-0.5 flex flex-wrap items-center gap-1">
+              {r.clickCount > 0 ? (
+                <span className="inline-block rounded bg-fuchsia-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-fuchsia-700" title={`Clicked a link ${r.clickCount}×`}>🔥 Clicked{r.clickCount > 1 ? ` ${r.clickCount}×` : ""}</span>
+              ) : r.openCount > 0 ? (
+                <span className="inline-block rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700" title={`Opened ${r.openCount}×`}>👁 Opened{r.openCount > 1 ? ` ${r.openCount}×` : ""}</span>
+              ) : r.bounced ? (
+                <span className="inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700" title="The email bounced">⚠ Bounced</span>
+              ) : (
+                <span className="inline-block rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">✉️ {r.delivered ? "Delivered" : "Sent"}</span>
+              )}
             </div>
           ) : null}
           {r.ownerName && (
@@ -2191,6 +2209,10 @@ function toRow(p: {
   bookedWith?: string | null;
   emailed?: boolean;
   unsubscribed?: boolean;
+  delivered?: boolean;
+  openCount?: number;
+  clickCount?: number;
+  bounced?: boolean;
   hasEmail?: boolean;
   emailInvalid?: boolean;
   reviewStatus?: string;
@@ -2234,6 +2256,10 @@ function toRow(p: {
     bookedWith: p.bookedWith ?? null,
     emailed: p.emailed ?? false,
     unsubscribed: p.unsubscribed ?? false,
+    delivered: p.delivered ?? false,
+    openCount: p.openCount ?? 0,
+    clickCount: p.clickCount ?? 0,
+    bounced: p.bounced ?? false,
     hasEmail: p.hasEmail ?? false,
     emailInvalid: p.emailInvalid ?? false,
     reviewStatus: p.reviewStatus ?? "PENDING",

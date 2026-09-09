@@ -117,7 +117,13 @@ export async function sendOutreach(prospectId: string, opts: { force?: boolean }
   // mail-receiving or forwarding to set up on the subdomain.
   const fromEmail = owner?.sendingEmail || process.env.OUTREACH_FROM_EMAIL;
   const fromName = owner?.name || process.env.OUTREACH_DEFAULT_SENDER_NAME || "Hey Lily";
-  const from = fromEmail ? `${fromName} <${fromEmail}>` : undefined;
+  // Never let a cold email fall back to the transactional RESEND_FROM (the main
+  // domain) — that's what quietly sent from team@heylily.ai. Require a real
+  // cold-sending address so the main domain's reputation stays protected.
+  if (!fromEmail) {
+    return { sent: false, reason: `No cold-sending address for ${owner?.name || "this rep"} — set “Sends from” on their Team profile (or set OUTREACH_FROM_EMAIL).` };
+  }
+  const from = `${fromName} <${fromEmail}>`;
 
   const result = await sendEmail({
     to,
@@ -129,6 +135,9 @@ export async function sendOutreach(prospectId: string, opts: { force?: boolean }
 
   if (!result.sent) return { sent: false, reason: result.reason || "Send failed" };
 
-  await prisma.prospect.update({ where: { id: prospect.id }, data: { emailedAt: new Date() } });
+  await prisma.prospect.update({
+    where: { id: prospect.id },
+    data: { emailedAt: new Date(), outreachMessageId: result.id ?? null },
+  });
   return { sent: true };
 }
