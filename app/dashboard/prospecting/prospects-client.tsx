@@ -1289,6 +1289,10 @@ function DetailsPanel({
   const [outreachMsg, setOutreachMsg] = useState<string | null>(null);
   const [emailPreview, setEmailPreview] = useState(false);
   const [fields, setFields] = useState({
+    url: r.url ?? "",
+    leadName: r.contactName ?? "",
+    email: r.contactEmail ?? "",
+    phone: r.phone ?? "",
     businessName: r.businessName ?? "",
     industry: r.industry ?? "",
     estimatedRevenue: r.estimatedRevenue ?? "",
@@ -1296,9 +1300,16 @@ function DetailsPanel({
     notes: r.notes ?? "",
   });
   const [saved, setSaved] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
 
   async function saveFields() {
+    setSaveErr(null);
+    const urlChanged = fields.url.trim() && fields.url.trim() !== r.url;
     const payload = {
+      ...(urlChanged ? { url: fields.url.trim() } : {}),
+      leadName: fields.leadName.trim() || null,
+      email: fields.email.trim() || null,
+      phone: fields.phone.trim() || null,
       businessName: fields.businessName.trim() || null,
       industry: fields.industry.trim() || null,
       estimatedRevenue: fields.estimatedRevenue.trim() || null,
@@ -1310,10 +1321,32 @@ function DetailsPanel({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    const data = await res.json().catch(() => ({}));
     if (res.ok) {
-      onPatch(payload);
+      const patch: Partial<ProspectRow> = {
+        leadName: payload.leadName,
+        contactName: payload.leadName,
+        email: payload.email,
+        contactEmail: payload.email,
+        hasEmail: Boolean(payload.email),
+        phone: payload.phone,
+        businessName: payload.businessName,
+        industry: payload.industry,
+        estimatedRevenue: payload.estimatedRevenue,
+        employees: payload.employees,
+        notes: payload.notes,
+      };
+      // A corrected domain resets the scan — reflect that so the row shows "Scan".
+      if (urlChanged && data.prospect?.url) {
+        patch.url = data.prospect.url;
+        patch.scanStatus = "PENDING";
+        patch.trustScore = null;
+      }
+      onPatch(patch);
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
+    } else {
+      setSaveErr(typeof data.error === "string" ? data.error : "Could not save.");
     }
   }
 
@@ -1353,7 +1386,31 @@ function DetailsPanel({
     <IssuesSection r={r} prevalence={prevalence} totalScanned={totalScanned} />
     <div className="grid gap-4 md:grid-cols-3">
       <div className="space-y-3 md:col-span-2">
+        <div>
+          <label className={label}>Website / domain</label>
+          <div className="flex gap-2">
+            <input className={input} value={fields.url} onChange={(e) => setFields((f) => ({ ...f, url: e.target.value }))} placeholder="firm.com" />
+            <button onClick={onRunScan} disabled={scanning} className="btn-secondary whitespace-nowrap text-sm">
+              {scanning ? "Scanning…" : r.scanStatus === "COMPLETED" ? "Re-scan" : "Scan"}
+            </button>
+          </div>
+          {fields.url.trim() && fields.url.trim() !== r.url && (
+            <p className="mt-1 text-[11px] text-amber-600">Save first — changing the domain clears the old scan. Then click Re-scan.</p>
+          )}
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className={label}>Contact name</label>
+            <input className={input} value={fields.leadName} onChange={(e) => setFields((f) => ({ ...f, leadName: e.target.value }))} placeholder="First name (used in the email)" />
+          </div>
+          <div>
+            <label className={label}>Contact email</label>
+            <input className={input} type="email" value={fields.email} onChange={(e) => setFields((f) => ({ ...f, email: e.target.value }))} placeholder="name@firm.com" />
+          </div>
+          <div>
+            <label className={label}>Phone</label>
+            <input className={input} value={fields.phone} onChange={(e) => setFields((f) => ({ ...f, phone: e.target.value }))} placeholder="+1 555-123-4567" />
+          </div>
           <div>
             <label className={label}>Business name</label>
             <input className={input} value={fields.businessName} onChange={(e) => setFields((f) => ({ ...f, businessName: e.target.value }))} />
@@ -1376,13 +1433,9 @@ function DetailsPanel({
           <textarea className="input min-h-[64px] w-full text-sm" value={fields.notes} onChange={(e) => setFields((f) => ({ ...f, notes: e.target.value }))} />
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={saveFields} className="btn-secondary text-sm">Save details</button>
+          <button onClick={saveFields} className="btn text-sm">Save details</button>
           {saved && <span className="text-xs text-emerald-600">Saved.</span>}
-          {(r.phone || r.email) && (
-            <span className="text-xs text-slate-500">
-              {r.phone && <>☎ {r.phone}</>} {r.email && <>· ✉ {r.email}</>}
-            </span>
-          )}
+          {saveErr && <span className="text-xs text-red-600">{saveErr}</span>}
         </div>
       </div>
 
