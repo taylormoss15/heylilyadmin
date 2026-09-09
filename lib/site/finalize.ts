@@ -1,4 +1,4 @@
-import { complianceBadge, contactFormWidget, cookieBanner, faqPageJsonLd, localBusinessJsonLd } from "@/lib/site/renderer";
+import { complianceBadge, contactFormWidget, trackingWidget, cookieBanner, faqPageJsonLd, localBusinessJsonLd } from "@/lib/site/renderer";
 import type { BusinessData } from "@/lib/site/ir";
 
 function escAttr(s: string): string {
@@ -78,6 +78,11 @@ export function finalizeCustomHtml(rawHtml: string, opts: FinalizeOptions): stri
   // (demos suppress the badge/relay). Wires the form to email entries.
   if (opts.showBadge !== false && /<form\b/i.test(html) && !/widget\/contact-forms\.js/.test(html)) {
     footerBits.push(contactFormWidget(opts.clientId, adminBaseUrl));
+  }
+  // Analytics beacon — on real client sites only (never demos), for the monthly
+  // report: page views, phone taps, form submits.
+  if (opts.showBadge !== false && !/widget\/track\.js/.test(html)) {
+    footerBits.push(trackingWidget(opts.clientId, adminBaseUrl));
   }
 
   if (footerBits.length) {

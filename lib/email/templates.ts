@@ -195,3 +195,39 @@ export function coldOutreachEmail(input: {
     }),
   };
 }
+
+// ---- Monthly site report → the business owner (value/retention) ----
+export function monthlyReportEmail(input: {
+  businessName: string;
+  monthLabel: string; // e.g. "August 2026"
+  visits: number;
+  telTaps: number;
+  formFills: number;
+  insightsUrl: string;
+  address?: string;
+}): BuiltEmail {
+  const stat = (n: number, label: string) =>
+    `<td align="center" style="padding:10px 6px">
+      <div style="font-size:34px;font-weight:800;color:${T.INK};line-height:1">${n.toLocaleString()}</div>
+      <div style="font-size:13px;color:${T.MUTED};margin-top:4px">${label}</div>
+    </td>`;
+
+  const content = `
+    <p style="margin:0 0 6px;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${T.BRAND}">${esc(input.monthLabel)}</p>
+    <h1 style="margin:0 0 8px;font-size:22px">Your website worked for you last month</h1>
+    <p style="margin:0 0 18px;color:${T.MUTED};font-size:15px;line-height:1.5">Here's what happened on <strong style="color:${T.INK}">${esc(input.businessName)}</strong>'s site — managed and improved by Hey Lily.</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid ${T.BORDER};border-radius:14px;margin:0 0 18px">
+      <tr>${stat(input.visits, "Website visits")}${stat(input.telTaps, "Calls tapped")}${stat(input.formFills, "Contact forms")}</tr>
+    </table>
+    <p style="margin:0 0 18px">${emailButton("See your full report →", input.insightsUrl, "#7c3aed")}</p>
+    <p style="margin:0;color:${T.MUTED};font-size:13px;line-height:1.5">Your private report link works for a limited time, then expires for your security. Questions? Just reply to this email.</p>`;
+
+  return {
+    subject: `${input.businessName}: ${input.visits.toLocaleString()} website visits in ${input.monthLabel}`,
+    html: emailLayout({
+      preheader: `${input.visits.toLocaleString()} visits · ${input.telTaps} calls · ${input.formFills} forms last month.`,
+      contentHtml: content,
+      footer: { address: input.address },
+    }),
+  };
+}

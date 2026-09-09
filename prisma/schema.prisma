@@ -436,3 +436,19 @@ model PublishRecord {
 
   @@index([pageId, createdAt])
 }
+
+// Daily rollup of first-party site analytics per client, fed by the tracking
+// beacon (public/widget/track.js). Powers the monthly email report and the
+// ephemeral insights page. One row per client per day.
+model SiteMetric {
+  id        String   @id @default(cuid())
+  clientId  String
+  date      String // YYYY-MM-DD (UTC)
+  pageviews Int      @default(0)
+  telTaps   Int      @default(0)
+  formFills Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, date])
+  @@index([clientId, date])
+}

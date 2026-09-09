@@ -285,6 +285,16 @@ export function contactFormWidget(clientId: string, adminBaseUrl: string): strin
 <script src="${esc(base)}/widget/contact-forms.js" defer></script>`;
 }
 
+// First-party, cookieless analytics beacon: counts page views, phone-link taps,
+// and form submissions per client so we can email the business a monthly report.
+export function trackingWidget(clientId: string, adminBaseUrl: string): string {
+  const base = adminBaseUrl.replace(/\/$/, "");
+  return `<script>window.HEYLILY_CLIENT_ID=window.HEYLILY_CLIENT_ID||${JSON.stringify(
+    clientId
+  )};window.HEYLILY_API_BASE=window.HEYLILY_API_BASE||${JSON.stringify(base)};</script>
+<script src="${esc(base)}/widget/track.js" defer></script>`;
+}
+
 export function cookieBanner(): string {
   return `<div class="cookie" id="heylily-cookie" role="region" aria-label="Cookie consent" style="position:fixed;left:0;right:0;bottom:0;z-index:2147483000;background:#1b2430;color:#fff;padding:14px 20px;display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;font:14px system-ui,sans-serif">
 <span>We use cookies to improve your experience.</span>

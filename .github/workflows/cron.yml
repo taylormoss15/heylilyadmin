@@ -7,10 +7,29 @@ name: Scheduled jobs
 on:
   schedule:
     - cron: "0 13 * * *" # daily at 13:00 UTC (~8–9am ET)
+    - cron: "0 14 1 * *" # monthly client report — 1st of the month, 14:00 UTC
   workflow_dispatch: {}
 
 jobs:
+  monthly-report:
+    # Only the monthly cron (1st @ 14:00) and manual runs; skip on the daily cron.
+    if: github.event.schedule == '0 14 1 * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Monthly client value report
+        run: |
+          code=$(curl -sS -o /tmp/body.txt -w "%{http_code}" -X POST \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            https://admin.heylily.ai/api/cron/monthly-report || echo "000")
+          body=$(cat /tmp/body.txt 2>/dev/null || echo "")
+          echo "## Monthly report → HTTP $code" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"; echo "$body" >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "HTTP $code — $body"
+          [ "$code" = "200" ]
+
   daily:
+    # Skip on the monthly-only schedule; run on the daily cron and manual runs.
+    if: github.event.schedule != '0 14 1 * *'
     runs-on: ubuntu-latest
     steps:
       - name: Launchpad digest (paid but not live)
