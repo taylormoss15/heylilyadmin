@@ -52,6 +52,14 @@ export function finalizeCustomHtml(rawHtml: string, opts: FinalizeOptions): stri
     if (desc) headBits.push(`<meta property="og:description" content="${escAttr(desc)}">`);
     headBits.push(`<meta name="twitter:card" content="summary_large_image">`);
   }
+  // Open Graph image — required for the "social share" signal and for links to
+  // render with a preview. Prefer the page's own hero image; fall back to the
+  // Hey Lily cover. Only add if the page doesn't already declare one.
+  if (!/property=["']og:image["']/i.test(html)) {
+    const firstImg = (html.match(/<img\b[^>]*\bsrc=["'](https?:\/\/[^"']+)["']/i) || [])[1];
+    const ogImage = firstImg || `${adminBaseUrl}/og-cover.png`;
+    headBits.push(`<meta property="og:image" content="${escAttr(ogImage)}">`);
+  }
   if (headBits.length) {
     const block = headBits.join("\n");
     html = insertBefore(html, /<\/head>/i, block) ?? html.replace(/<body\b[^>]*>/i, (m) => `${m}\n${block}`);

@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
     trustScore: result.trust.score,
     trustBreakdown: JSON.stringify({ pillars: result.trust.pillars, capped: result.trust.capped, band: result.trust.band }),
     siteStatus: result.siteStatus ?? "ok",
+    capturedHtml: parsed.data.html, // reused to build the demo without re-fetching
     scanStatus: "COMPLETED",
     scanError: null,
     score: result.scan.score,

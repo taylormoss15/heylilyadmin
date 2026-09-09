@@ -38,12 +38,18 @@ function launchBrowser() {
   return chromium.launch({ headless: true, executablePath });
 }
 
-export async function importFromUrl(rawUrl: string): Promise<ImportResult> {
+export async function importFromUrl(rawUrl: string, opts?: { html?: string }): Promise<ImportResult> {
   const url = normalizeUrl(rawUrl);
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    // Bot-blocked sites: build the demo from HTML the rep captured in their own
+    // browser (via the bookmarklet) instead of fetching the URL ourselves.
+    if (opts?.html) {
+      await page.setContent(opts.html, { waitUntil: "domcontentloaded", timeout: 30000 });
+    } else {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    }
 
     // Extract everything we can in one pass, in the page context. NOTE:
     // this callback is serialized and run in the browser, so it must be

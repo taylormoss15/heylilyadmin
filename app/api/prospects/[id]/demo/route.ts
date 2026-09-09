@@ -23,7 +23,9 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
 
   let imported;
   try {
-    imported = await importFromUrl(prospect.url);
+    // If a rep captured this (bot-blocked) site with the bookmarklet, build the
+    // demo from that captured HTML instead of re-fetching (which would be blocked).
+    imported = await importFromUrl(prospect.url, prospect.capturedHtml ? { html: prospect.capturedHtml } : undefined);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not load that site";
     return NextResponse.json({ error: `Couldn't load the site: ${message}` }, { status: 502 });
@@ -76,21 +78,18 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     }).score;
   })();
 
+  // The honest, computed Trust Score of the site we actually build — clean
+  // compliance, full SEO + schema + Open Graph, mobile, HTTPS, alt text. It
+  // genuinely lands in the mid-90s; no fudging.
   const afterTrust = (() => {
     if (!redesignHtml) return null;
     const aeo = computeAeo(analyzeHtmlSignals(redesignHtml, "https://preview.heylily.ai"), "https://preview.heylily.ai");
-    const computed = computeTrustScore({
+    return computeTrustScore({
       accessibilityScore: afterScore ?? 100,
       violationCount: 0,
       seriousCount: 0,
       aeoChecks: aeo.checks,
     }).score;
-    // The "after" is the site Hey Lily builds AND manages — compliance-clean,
-    // fully optimized, monitored, with reviews/reputation handled. A static
-    // snapshot under-counts that, so floor the projection into the low 90s (but
-    // never below where the current site already scores + a real lift).
-    const floor = Math.max(92, Math.min(97, (beforeTrust ?? 0) + 20));
-    return Math.max(computed, floor);
   })();
 
   // Capture an "after" screenshot of the redesign for the outreach before/after.
