@@ -338,7 +338,7 @@ model AdminUser {
   calendlyUrl  String? // this rep's booking link, used for their demos
   phone        String? // this rep's direct phone, shown in their outreach signature
   sendingEmail String? // this rep's cold-outreach from-address, e.g. gretchen@mail.heylily.ai
-  captureToken String?  @unique // personal token for the browser bookmarklet scanner
+  captureToken String? // personal token for the browser bookmarklet scanner (random 24-byte; uniqueness enforced by generation, not a DB constraint)
   createdAt    DateTime @default(now())
 }
 

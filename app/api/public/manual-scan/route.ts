@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing token, url, or page content." }, { status: 400, headers: CORS });
   }
 
-  const rep = await prisma.adminUser.findUnique({ where: { captureToken: parsed.data.token } });
+  const rep = await prisma.adminUser.findFirst({ where: { captureToken: parsed.data.token } });
   if (!rep) return NextResponse.json({ error: "Invalid capture token — regenerate it in your account." }, { status: 401, headers: CORS });
 
   const url = normalizeProspectUrl(parsed.data.url);
