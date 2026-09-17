@@ -44,6 +44,16 @@ function pctPassing(checks: AeoCheck[], labels: string[]): number {
   return Math.round((passed / relevant.length) * 100);
 }
 
+// The most we'll ever advertise for a projected "after" Trust Score. An
+// automated scan can't honestly certify a literal 100 (axe-core catches only a
+// portion of real WCAG issues), and a perfect score reads as sales fluff and
+// invites pushback — so we promise the top of the Excellent band, not
+// perfection. The real number still shows through whenever it lands lower.
+export const PROJECTED_AFTER_CEILING = 97;
+export function projectAfterTrust(score: number): number {
+  return Math.min(Math.round(score), PROJECTED_AFTER_CEILING);
+}
+
 export function trustBand(score: number): TrustScore["band"] {
   if (score >= 90) return { label: "Excellent", tone: "excellent" };
   if (score >= 75) return { label: "Good", tone: "good" };

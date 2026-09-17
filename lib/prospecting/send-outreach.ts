@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/integrations/email";
 import { coldOutreachEmail } from "@/lib/email/templates";
 import { outreachIssues } from "@/lib/prospecting/outreach-issues";
+import { projectAfterTrust } from "@/lib/prospecting/trust-score";
 import type { AeoCheck } from "@/lib/prospecting/aeo";
 import type { RawViolation } from "@/lib/prospecting/issues";
 
@@ -56,7 +57,7 @@ export async function composeOutreachEmail(
     firstName,
     firmName,
     score: prospect.trustScore ?? 0,
-    newScore: demo?.afterTrust ?? 92,
+    newScore: projectAfterTrust(demo?.afterTrust ?? 92),
     beforeShotUrl: demo?.beforeShot ? `${base}/demo/${prospect.demoToken}/shot/before` : null,
     afterShotUrl: demo?.afterShot ? `${base}/demo/${prospect.demoToken}/shot/after` : null,
     accessibilityIssue: issues.accessibilityIssue,

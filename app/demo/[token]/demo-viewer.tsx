@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { projectAfterTrust } from "@/lib/prospecting/trust-score";
 
 // Public before/after demo. "After" is the real, interactive AI redesign in an
 // iframe (clickable, works on a phone); "Before" is a screenshot of their
@@ -25,6 +26,7 @@ export default function DemoViewer({
   ctaUrl: string;
 }) {
   const [view, setView] = useState<"after" | "before">("after");
+  const afterShown = projectAfterTrust(afterTrust ?? 92);
 
   return (
     <div className="flex h-screen flex-col bg-slate-900">
@@ -46,7 +48,7 @@ export default function DemoViewer({
               onClick={() => setView("after")}
               className={`whitespace-nowrap rounded-md px-3 py-1.5 ${view === "after" ? "bg-white text-slate-900" : "text-slate-300"}`}
             >
-              After<span className="ml-1.5 font-semibold text-emerald-500">{afterTrust ?? 92}/100</span>
+              After<span className="ml-1.5 font-semibold text-emerald-500">{afterShown}/100</span>
             </button>
           </div>
           <a href={reportUrl} className="hidden rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 sm:inline-block">
@@ -84,7 +86,7 @@ export default function DemoViewer({
           )}
           {view === "after" && (
             <span className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-lg">
-              With your new site: {afterTrust ?? 92}/100
+              With your new site: {afterShown}/100
             </span>
           )}
         </div>

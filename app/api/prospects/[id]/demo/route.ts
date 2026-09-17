@@ -7,7 +7,7 @@ import { finalizeCustomHtml } from "@/lib/site/finalize";
 import { outcomeIssues } from "@/lib/prospecting/issues";
 import { analyzeHtmlSignals } from "@/lib/prospecting/html-signals";
 import { computeAeo } from "@/lib/prospecting/aeo";
-import { computeTrustScore } from "@/lib/prospecting/trust-score";
+import { computeTrustScore, projectAfterTrust } from "@/lib/prospecting/trust-score";
 import { scanProspect } from "@/lib/prospecting/scan";
 import { screenshotHtml } from "@/lib/site/screenshot";
 
@@ -95,7 +95,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
   // sell is byte-for-byte the number a prospect gets if they run their new site
   // through "score my site" once it's live — guaranteed, not approximated.
   const afterTrust = redesignHtml
-    ? (await scanProspect(prospect.url, { html: redesignHtml, scoreOnly: true })).trust.score
+    ? projectAfterTrust((await scanProspect(prospect.url, { html: redesignHtml, scoreOnly: true })).trust.score)
     : null;
 
   // Capture an "after" screenshot of the redesign for the outreach before/after.

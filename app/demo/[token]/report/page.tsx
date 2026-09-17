@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
+import { projectAfterTrust } from "@/lib/prospecting/trust-score";
 import PrintButton from "./print-button";
 
 export const dynamic = "force-dynamic";
@@ -135,7 +136,7 @@ export default async function ReportPage({ params }: { params: { token: string }
   const date = new Date(demo.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 
   const beforeT = demo.beforeTrust;
-  const afterT = demo.afterTrust ?? 92;
+  const afterT = projectAfterTrust(demo.afterTrust ?? 92);
   const gain = beforeT !== null ? Math.max(0, afterT - beforeT) : null;
   const topIssues = issues.slice(0, 3);
   const unlocked = demo.unlocked;
@@ -392,7 +393,7 @@ export default async function ReportPage({ params }: { params: { token: string }
           )}
 
           <div className="mt-5 flex items-center gap-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-            <ScoreRing value={demo.afterScore ?? 100} color="#059669" size={84} stroke={9} />
+            <ScoreRing value={projectAfterTrust(demo.afterScore ?? 92)} color="#059669" size={84} stroke={9} />
             <p className="text-sm leading-relaxed text-slate-700">
               A bespoke, modern redesign — faster, clearer, and engineered to turn visitors into calls and bookings. It ships with a{" "}
               <strong>live accessibility compliance badge</strong> and ongoing <strong>weekly monitoring</strong>.
