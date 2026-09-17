@@ -670,6 +670,24 @@ export default function ProspectsClient({
     return r && stageOf(r) === "build";
   }).length;
 
+  // Leads in the review stage that are checked — queue them all for sending in
+  // one click (Approve moves them to "Queued to send").
+  const selectedReviewable = [...selected].filter((id) => {
+    const r = rows.find((x) => x.id === id);
+    return r && stageOf(r) === "review";
+  }).length;
+
+  async function queueSelected() {
+    const ids = [...selected].filter((id) => {
+      const r = rows.find((x) => x.id === id);
+      return r && stageOf(r) === "review";
+    });
+    if (ids.length === 0) return;
+    for (const id of ids) await review(id, "APPROVED");
+    setSelected(new Set());
+    router.refresh();
+  }
+
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -815,7 +833,7 @@ export default function ProspectsClient({
               <span className="text-xs text-slate-500">Tick the leads you want a website built for, then build.</span>
             </>
           )}
-          {stageFilter === "review" && <span className="text-sm text-slate-500">Open each lead → preview the site → Approve &amp; queue or Reject.</span>}
+          {stageFilter === "review" && <span className="text-sm text-slate-500">Open a lead to preview the site, or check the ones you&apos;re happy with and queue them in bulk for their rep to send.</span>}
           {stageFilter === "queued" && (
             <div className="flex flex-wrap items-center gap-3">
               <button onClick={sendOutreachBulk} disabled={sending || queuedStats.ready === 0} className="btn text-sm">
@@ -979,6 +997,20 @@ export default function ProspectsClient({
         </div>
       )}
 
+      {selectedReviewable > 0 && (
+        <div className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 shadow-sm">
+          <span className="text-sm font-medium text-emerald-800">
+            {selectedReviewable} lead{selectedReviewable === 1 ? "" : "s"} checked — approve &amp; queue them for their assigned rep to send.
+          </span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSelected(new Set())} className="text-xs text-slate-500 hover:text-slate-800">Clear</button>
+            <button onClick={queueSelected} className="btn text-sm">
+              ✓ Queue {selectedReviewable} for sending
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="card overflow-x-auto p-0">
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -987,13 +1019,16 @@ export default function ProspectsClient({
                 <input
                   type="checkbox"
                   aria-label="Select all buildable"
-                  checked={selectedBuildable > 0 && visible.filter((r) => stageOf(r) === "build").every((r) => selected.has(r.id))}
+                  checked={
+                    selectedBuildable + selectedReviewable > 0 &&
+                    visible.filter((r) => stageOf(r) === "build" || stageOf(r) === "review").every((r) => selected.has(r.id))
+                  }
                   onChange={(e) => {
-                    const buildIds = visible.filter((r) => stageOf(r) === "build").map((r) => r.id);
+                    const ids = visible.filter((r) => stageOf(r) === "build" || stageOf(r) === "review").map((r) => r.id);
                     setSelected((s) => {
                       const next = new Set(s);
-                      if (e.target.checked) buildIds.forEach((id) => next.add(id));
-                      else buildIds.forEach((id) => next.delete(id));
+                      if (e.target.checked) ids.forEach((id) => next.add(id));
+                      else ids.forEach((id) => next.delete(id));
                       return next;
                     });
                   }}
@@ -1125,8 +1160,13 @@ function FragmentRow({
     <>
       <tr className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${dimmed ? "opacity-50" : ""}`}>
         <td className="px-3 py-3">
-          {stage === "build" && (
-            <input type="checkbox" aria-label="Select for website build" checked={selected} onChange={onToggleSelect} />
+          {(stage === "build" || stage === "review") && (
+            <input
+              type="checkbox"
+              aria-label={stage === "build" ? "Select for website build" : "Select to queue for sending"}
+              checked={selected}
+              onChange={onToggleSelect}
+            />
           )}
         </td>
         <td className="px-4 py-3">
@@ -1199,10 +1239,17 @@ function FragmentRow({
               )}
             </div>
           ) : null}
-          {r.ownerName && (
-            <div className="mt-0.5 text-[11px] text-slate-400">
-              {r.ownerId === currentUser?.id ? "Yours" : r.ownerName}
+          {r.ownerId ? (
+            <div className="mt-0.5 text-[11px] text-slate-500">
+              {stage === "review" || stage === "queued" ? "Rep: " : ""}
+              {r.ownerId === currentUser?.id ? "You" : r.ownerName}
             </div>
+          ) : (
+            (stage === "review" || stage === "queued") && (
+              <div className="mt-0.5 text-[11px] font-medium text-amber-600" title="Assign a rep in Details — an unassigned lead can't be sent.">
+                ⚠ No rep assigned
+              </div>
+            )
           )}
         </td>
         <td className="px-4 py-3">
