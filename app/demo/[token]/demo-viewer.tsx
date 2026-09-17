@@ -38,15 +38,15 @@ export default function DemoViewer({
           <div className="flex rounded-lg border border-slate-700 p-0.5 text-sm">
             <button
               onClick={() => setView("before")}
-              className={`rounded-md px-3 py-1.5 ${view === "before" ? "bg-white text-slate-900" : "text-slate-300"}`}
+              className={`whitespace-nowrap rounded-md px-3 py-1.5 ${view === "before" ? "bg-white text-slate-900" : "text-slate-300"}`}
             >
-              Before
+              Before{beforeTrust !== null && <span className="ml-1.5 font-semibold text-red-500">{beforeTrust}/100</span>}
             </button>
             <button
               onClick={() => setView("after")}
-              className={`rounded-md px-3 py-1.5 ${view === "after" ? "bg-white text-slate-900" : "text-slate-300"}`}
+              className={`whitespace-nowrap rounded-md px-3 py-1.5 ${view === "after" ? "bg-white text-slate-900" : "text-slate-300"}`}
             >
-              After
+              After<span className="ml-1.5 font-semibold text-emerald-500">{afterTrust ?? 92}/100</span>
             </button>
           </div>
           <a href={reportUrl} className="hidden rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 sm:inline-block">
