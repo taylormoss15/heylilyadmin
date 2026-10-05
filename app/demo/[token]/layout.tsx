@@ -11,8 +11,5 @@ export default async function DemoLayout({ children, params }: { children: React
   if (!prospect || (!isOwner(me) && prospect.ownerId !== me.id)) return children;
   const recipients = outreachRecipients(prospect);
   const blocked = prospect.unsubscribedAt ? "This lead is unsubscribed." : prospect.emailedAt ? "Outreach has already been sent." : !prospect.ownerId ? "Assign a rep before queueing." : !recipients.length ? "Add a recipient before queueing." : null;
-  return <>
-    <AdminPreviewBanner prospectId={prospect.id} recipients={recipients} reviewStatus={prospect.reviewStatus} blocked={blocked} aiConfigured={Boolean(process.env.ANTHROPIC_API_KEY)} />
-    {children}
-  </>;
+  return <AdminPreviewBanner prospectId={prospect.id} recipients={recipients} reviewStatus={prospect.reviewStatus} blocked={blocked} aiConfigured={Boolean(process.env.ANTHROPIC_API_KEY)}>{children}</AdminPreviewBanner>;
 }

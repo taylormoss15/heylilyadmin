@@ -5,6 +5,7 @@ import { editCustomSite } from "@/lib/site/ai-designer";
 import { finalizeCustomHtml } from "@/lib/site/finalize";
 import { screenshotHtml } from "@/lib/site/screenshot";
 import type { BusinessData, PageIR } from "@/lib/site/ir";
+import { designChatSchema } from "@/lib/site/design-chat";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -16,10 +17,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const me = await getCurrentUser();
   if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const instruction = (await request.json().catch(() => ({})))?.instruction;
-  if (typeof instruction !== "string" || !instruction.trim()) {
-    return NextResponse.json({ error: "Describe the change you want." }, { status: 400 });
+  const parsed = designChatSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Enter a message and attach up to two PNG, JPEG or WebP screenshots (3 MB each). Keep the conversation to 12 recent messages." }, { status: 400 });
   }
+  const { instruction, history, screenshots, chat } = parsed.data;
 
   const prospect = await prisma.prospect.findUnique({ where: { id: params.id } });
   if (prospect && !isOwner(me) && prospect.ownerId !== me.id) {
@@ -49,11 +51,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const design = await editCustomSite(
       { business, ir: {} as unknown as PageIR, clientId, showCookieBanner: false, showBadge: false, adminBaseUrl: process.env.ADMIN_BASE_URL },
       demo.redesignHtml,
-      instruction.trim()
+      instruction,
+      chat ? { history, screenshots } : undefined
     );
     if (design.dryRun) {
       return NextResponse.json({ error: "AI editing is not configured for this environment." }, { status: 503 });
     }
+    if (design.discussionOnly) return NextResponse.json({ ok: true, summary: design.summary, changed: false });
     finalized = finalizeCustomHtml(design.html, finalizeOpts);
     summary = design.summary;
     afterScore = design.report.a11yScore;
@@ -70,5 +74,5 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }),
   // A changed site must be reviewed again before outreach.
   prisma.prospect.update({ where: { id: prospect.id }, data: { reviewStatus: "PENDING" } })]);
-  return NextResponse.json({ ok: true, summary });
+  return NextResponse.json({ ok: true, summary, changed: true });
 }
