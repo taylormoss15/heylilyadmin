@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { importFromUrl } from "@/lib/site/import";
-import { generateCustomSite } from "@/lib/site/ai-designer";
+import { generateCustomSite, editCustomSite, isAiConfigured } from "@/lib/site/ai-designer";
+import { demoModeSchema, PRESERVE_DESIGN_INSTRUCTION } from "@/lib/site/demo-mode";
+import { getCurrentUser, isOwner } from "@/lib/current-user";
 import { finalizeCustomHtml } from "@/lib/site/finalize";
 import { outcomeIssues } from "@/lib/prospecting/issues";
 import { analyzeHtmlSignals } from "@/lib/prospecting/html-signals";
@@ -18,9 +20,21 @@ export const maxDuration = 300;
 // their current site, score it, build the AI redesign, and store it all under
 // a public token served at /demo/[token] (interactive before/after) and
 // /demo/[token]/report (print-friendly scorecard).
-export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  const me = await getCurrentUser();
+  if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const text = await request.text();
+  let body;
+  try { body = text ? JSON.parse(text) : {}; }
+  catch { return NextResponse.json({ error: "Invalid request." }, { status: 400 }); }
+  const parsed = demoModeSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "Choose a new design or preserve the current design." }, { status: 400 });
+  const { mode } = parsed.data;
   const prospect = await prisma.prospect.findUnique({ where: { id: params.id } });
   if (!prospect) return NextResponse.json({ error: "Prospect not found" }, { status: 404 });
+  if (!isOwner(me) && prospect.ownerId !== me.id) return NextResponse.json({ error: "You can only build demos for your own leads." }, { status: 403 });
+  if (prospect.siteStatus === "blocked" && !prospect.capturedHtml) return NextResponse.json({ error: "This site blocks automated access. Upload a browser capture in Your account before building either version." }, { status: 422 });
+  if (mode === "preserve" && !isAiConfigured()) return NextResponse.json({ error: "Preserving the current design requires AI editing to be configured." }, { status: 503 });
 
   let imported;
   try {
@@ -32,32 +46,28 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: `Couldn't load the site: ${message}` }, { status: 502 });
   }
 
-  // If we couldn't find their hours, publish a sensible, editable default on the
-  // site WE build (Mon–Fri 9–5) — most local firms are close, they can correct
-  // it before going live, and it earns the "hours published" trust signal. This
-  // only affects our redesign, never their current site's "before" score.
-  if (!imported.businessData.hours || imported.businessData.hours.length === 0) {
-    imported.businessData.hours = [
-      { label: "Monday – Friday", value: "9:00 AM – 5:00 PM" },
-      { label: "Saturday – Sunday", value: "Closed" },
-    ];
-  }
-
   const token = randomBytes(9).toString("base64url");
 
   let redesignHtml: string | null = null;
   let afterScore: number | null = null;
   let dryRun = false;
   try {
-    const design = await generateCustomSite({
+    const input = {
       business: imported.businessData,
+      instruction: "Use only business facts in the supplied content. Do not invent hours, addresses, testimonials or services to improve a score.",
       ir: imported.homeIr,
       clientId: `demo:${token}`,
       showCookieBanner: false,
       showBadge: false, // no client audit log behind a prospect demo yet
       adminBaseUrl: process.env.ADMIN_BASE_URL,
       imageUrls: imported.content.images.slice(0, 12),
-    });
+    };
+    if (mode === "preserve" && !imported.html) throw new Error("No original page HTML was captured. Upload the saved page first.");
+    const screenshot = imported.screenshot?.split(",")[1];
+    const design = mode === "preserve"
+      ? await editCustomSite(input, imported.html!, PRESERVE_DESIGN_INSTRUCTION + `\nOriginal URL: ${prospect.url}\nAccessibility findings: ${JSON.stringify(imported.scan.violations.map((v) => ({ id: v.id, help: v.help })))}\nExisting search checks: ${prospect.aeoChecks || "Not available"}`, { history: [], screenshots: screenshot ? [{ mediaType: "image/jpeg", data: screenshot }] : [] }, true)
+      : await generateCustomSite(input);
+    if (design.discussionOnly) throw new Error("The designer returned a question rather than an improved page. Please try again.");
     // Store the fully finalized (self-contained) HTML so /demo can serve it.
     redesignHtml = finalizeCustomHtml(design.html, {
       clientId: `demo:${token}`,
@@ -135,6 +145,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     where: { id: prospect.id },
     data: {
       demoToken: token,
+      reviewStatus: "PENDING",
       businessName: prospect.businessName || imported.content.businessName,
       ...(prospect.scanStatus !== "COMPLETED"
         ? {
@@ -154,6 +165,9 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
     ok: true,
     token: demo.token,
     dryRun,
+    mode,
+    beforeTrust,
+    afterTrust,
     demoUrl: `/demo/${demo.token}`,
     reportUrl: `/demo/${demo.token}/report`,
   });

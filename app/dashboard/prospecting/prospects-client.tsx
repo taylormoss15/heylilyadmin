@@ -338,6 +338,7 @@ export default function ProspectsClient({
     map: Record<FieldKey, number>;
   } | null>(null);
   const [stageFilter, setStageFilter] = useState<Stage | null>(null);
+  const [quickBuildMode, setQuickBuildMode] = useState<"new" | "preserve">("new");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [building, setBuilding] = useState<{ done: number; total: number } | null>(null);
 
@@ -358,17 +359,21 @@ export default function ProspectsClient({
     });
     if (ids.length === 0) return;
     setBuilding({ done: 0, total: ids.length });
+    let failures = 0;
+    let lastError = "";
     for (let i = 0; i < ids.length; i++) {
       try {
-        const res = await fetch(`/api/prospects/${ids[i]}/demo`, { method: "POST" });
+        const res = await fetch(`/api/prospects/${ids[i]}/demo`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: quickBuildMode }) });
         const data = await res.json().catch(() => ({}));
-        if (res.ok && data.token) patchRow(ids[i], { demoToken: data.token });
+        if (res.ok && data.token) patchRow(ids[i], { demoToken: data.token, reviewStatus: "PENDING" });
+        else { failures++; lastError = data.error || "Build failed."; }
       } catch {
-        /* keep going */
+        failures++; lastError = "Could not reach the server.";
       }
       setBuilding({ done: i + 1, total: ids.length });
     }
     setBuilding(null);
+    setImportMsg(failures ? `${failures} build(s) failed: ${lastError}` : `Built ${ids.length} website(s).`);
     setSelected(new Set());
     router.refresh();
   }
@@ -827,6 +832,7 @@ export default function ProspectsClient({
           )}
           {stageFilter === "build" && (
             <>
+              <label className="text-xs">Build option <select aria-label="Build option" value={quickBuildMode} disabled={!!building} onChange={(e) => setQuickBuildMode(e.target.value as "new" | "preserve")} className="input ml-2"><option value="new">Build new site</option><option value="preserve">Copy current site design</option></select></label>
               <button onClick={buildWebsites} disabled={!!building || selectedBuildable === 0} className="btn text-sm">
                 {building ? `Building ${building.done}/${building.total}…` : `Build websites for selected (${selectedBuildable})`}
               </button>
@@ -1051,6 +1057,7 @@ export default function ProspectsClient({
                 <FragmentRow
                   key={r.id}
                   r={r}
+                  quickBuildMode={quickBuildMode}
                   risk={risk}
                   isOpen={isOpen}
                   onToggle={() => setExpanded(isOpen ? null : r.id)}
@@ -1093,6 +1100,7 @@ export default function ProspectsClient({
 
 function FragmentRow({
   r,
+  quickBuildMode,
   risk,
   isOpen,
   onToggle,
@@ -1113,6 +1121,7 @@ function FragmentRow({
   onToggleSelect,
 }: {
   r: ProspectRow;
+  quickBuildMode: "new" | "preserve";
   risk: { label: string; cls: string };
   isOpen: boolean;
   onToggle: () => void;
@@ -1134,6 +1143,7 @@ function FragmentRow({
 }) {
   const [scanning, setScanning] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [buildError, setBuildError] = useState<string | null>(null);
   const dimmed = r.status === "DISMISSED";
   const stage = stageOf(r);
 
@@ -1147,10 +1157,14 @@ function FragmentRow({
   // rip through the list without opening each one.
   async function buildOne() {
     setBuilding(true);
+    setBuildError(null);
     try {
-      const res = await fetch(`/api/prospects/${r.id}/demo`, { method: "POST" });
+      const res = await fetch(`/api/prospects/${r.id}/demo`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: quickBuildMode }) });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.token) onPatch({ demoToken: data.token });
+      if (res.ok && data.token) onPatch({ demoToken: data.token, reviewStatus: "PENDING" });
+      else setBuildError(data.error || "Build failed.");
+    } catch {
+      setBuildError("Could not reach the server.");
     } finally {
       setBuilding(false);
     }
@@ -1264,6 +1278,7 @@ function FragmentRow({
         <td className="px-4 py-3 text-slate-600">{r.estimatedRevenue || <span className="text-slate-300">—</span>}</td>
         <td className="px-4 py-3 text-slate-600">{r.employees || <span className="text-slate-300">—</span>}</td>
         <td className="px-4 py-3">
+          {buildError && <p role="alert" className="mb-1 text-xs text-red-600">{buildError}</p>}
           <div className="flex items-center justify-end gap-1.5">
             {r.demoToken ? (
               <>
@@ -1557,7 +1572,7 @@ function DetailsPanel({
             <a href="/dashboard/account" target="_blank" rel="noreferrer" className="mt-2 inline-block font-semibold underline">Open manual capture tools →</a>
           </div>
         )}
-        <DemoBlock prospectId={r.id} demoToken={r.demoToken} onGenerated={(t) => onPatch({ demoToken: t })} />
+        <DemoBlock prospectId={r.id} demoToken={r.demoToken} onGenerated={(t) => onPatch({ demoToken: t, reviewStatus: "PENDING" })} />
 
         {/* Outreach — review the preview, approve/reject, then it joins the send queue. */}
         <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
@@ -2097,6 +2112,8 @@ function DemoBlock({
   demoToken: string | null;
   onGenerated: (token: string) => void;
 }) {
+  const [buildMode, setBuildMode] = useState<"new" | "preserve">("new");
+  const [scoreResult, setScoreResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -2134,12 +2151,13 @@ function DemoBlock({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/prospects/${prospectId}/demo`, { method: "POST" });
+      const res = await fetch(`/api/prospects/${prospectId}/demo`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: buildMode }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.token) {
         setError(typeof data.error === "string" ? data.error : "Demo generation failed");
         return;
       }
+      setScoreResult(data.beforeTrust !== null && data.afterTrust !== null ? `Digital Trust Score: ${data.beforeTrust} → ${data.afterTrust}${data.afterTrust <= data.beforeTrust ? " — no measured increase; review the remaining issues." : ""}` : null);
       onGenerated(data.token);
     } catch {
       setError("Demo generation failed — please try again.");
@@ -2158,10 +2176,17 @@ function DemoBlock({
 
   return (
     <div className="rounded-lg border border-brand-100 bg-brand-50 p-2.5">
+      <fieldset disabled={busy} className="mb-3 space-y-2 text-xs">
+        <legend className="mb-1 font-semibold">How should we build this site?</legend>
+        <label className="flex items-start gap-2"><input type="radio" name={`build-mode-${prospectId}`} checked={buildMode === "new"} onChange={() => setBuildMode("new")} /><span><strong>Build new site</strong><br />Create a fresh design using the business’s content.</span></label>
+        <label className="flex items-start gap-2"><input type="radio" name={`build-mode-${prospectId}`} checked={buildMode === "preserve"} onChange={() => setBuildMode("preserve")} /><span><strong>Copy current site design</strong><br />Keep the look; improve accessibility, search and trust signals.</span></label>
+        <p className="text-[10px] text-slate-500">The improved page is rescanned to measure its score. For blocked sites, upload a browser capture first.</p>
+      </fieldset>
+      {scoreResult && <p role="status" className="mb-2 text-xs">{scoreResult}</p>}
       {busy ? (
         <div className="text-center text-xs text-slate-600">
           <div className="mx-auto mb-2 h-5 w-5 animate-spin rounded-full border-2 border-brand-200 border-t-brand-500" />
-          Building demo — scraping the site &amp; designing the new one… (~1 min)
+          {buildMode === "preserve" ? "Improving the current design and measuring its score…" : "Building a new design and measuring its score…"}
         </div>
       ) : demoToken ? (
         <div className="space-y-2">
@@ -2207,12 +2232,12 @@ function DemoBlock({
             {editMsg && <p className={`mt-1 text-[11px] ${editMsg.startsWith("✓") ? "text-emerald-600" : "text-red-600"}`}>{editMsg}</p>}
           </div>
           <button onClick={generate} className="w-full text-[11px] text-slate-500 hover:text-slate-800">
-            ↻ Rebuild from scratch
+            ↻ Rebuild using selected option
           </button>
         </div>
       ) : (
         <button onClick={generate} className="btn w-full text-sm">
-          ✨ Generate demo (before/after + scorecard)
+          {buildMode === "preserve" ? "Improve current design" : "Build new site"}
         </button>
       )}
       {error && <p className="mt-1 text-[11px] text-red-600">{error}</p>}
