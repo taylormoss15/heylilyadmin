@@ -9,7 +9,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
   if (!prospect) return NextResponse.json({ error: "Prospect not found" }, { status: 404 });
 
   try {
-    const result = await scanProspect(prospect.url);
+    const result = await scanProspect(prospect.url, prospect.capturedHtml ? { html: prospect.capturedHtml } : undefined);
     const updated = await prisma.prospect.update({
       where: { id: prospect.id },
       data: {

@@ -6,13 +6,16 @@ import { useEffect, useRef, useState } from "react";
 // current page's HTML in the rep's own browser session (so bot blockers see a
 // human, not our server) and posts it to the manual-scan endpoint.
 function buildCode(token: string, base: string) {
-  return `javascript:(function(){var t=${JSON.stringify(token)};function toast(m,c){var d=document.createElement('div');d.textContent=m;d.style.cssText='position:fixed;z-index:2147483647;top:16px;right:16px;max-width:340px;background:'+(c||'#7C3AED')+';color:#fff;font:600 14px system-ui,sans-serif;padding:12px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.35)';document.documentElement.appendChild(d);setTimeout(function(){d.remove();},7000);}toast('Hey Lily: scanning this page…');fetch(${JSON.stringify(base)}+'/api/public/manual-scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:t,url:location.href,html:document.documentElement.outerHTML})}).then(function(r){return r.json();}).then(function(d){toast(d.ok?('\\u2713 Scored '+(d.businessName||d.url)+': '+d.trustScore+'/100 \\u2014 now in Prospecting'):('\\u2717 '+(d.error||'Scan failed')),d.ok?'#059669':'#dc2626');}).catch(function(){toast('\\u2717 Could not reach Hey Lily','#dc2626');});})();`;
+  return `javascript:(function(){var t=${JSON.stringify(token)};function toast(m,c){var d=document.createElement('div');d.textContent=m;d.style.cssText='position:fixed;z-index:2147483647;top:16px;right:16px;max-width:340px;background:'+(c||'#7C3AED')+';color:#fff;font:600 14px system-ui,sans-serif;padding:12px 16px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.35)';document.documentElement.appendChild(d);setTimeout(function(){d.remove();},7000);}var page=document.documentElement.cloneNode(true);var head=page.querySelector('head');if(head){var old=head.querySelector('base');if(old)old.remove();var baseNode=document.createElement('base');baseNode.href=location.href;head.prepend(baseNode);}toast('Hey Lily: scanning this page…');fetch(${JSON.stringify(base)}+'/api/public/manual-scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:t,url:location.href,html:page.outerHTML})}).then(function(r){return r.json();}).then(function(d){toast(d.ok?('\\u2713 Scored '+(d.businessName||d.url)+': '+d.trustScore+'/100 \\u2014 now in Prospecting'):('\\u2717 '+(d.error||'Scan failed')),d.ok?'#059669':'#dc2626');}).catch(function(){toast('\\u2717 Could not reach Hey Lily','#dc2626');});})();`;
 }
 
 export default function Bookmarklet({ initialToken, baseUrl }: { initialToken: string | null; baseUrl: string }) {
   const [token, setToken] = useState(initialToken);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [uploadMessage, setUploadMessage] = useState("");
+  const [uploadBusy, setUploadBusy] = useState(false);
   const linkRef = useRef<HTMLAnchorElement | null>(null);
 
   const code = token ? buildCode(token, baseUrl) : "";
@@ -36,7 +39,7 @@ export default function Bookmarklet({ initialToken, baseUrl }: { initialToken: s
       <div>
         <h2 className="text-sm font-semibold text-slate-900">Manual scanner (for bot-blocked sites)</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Some sites (Cloudflare, etc.) block our automated scanner. This bookmarklet runs the scan from <em>your</em> browser instead —
+          Some sites (Cloudflare, etc.) block our automated scanner. This bookmarklet captures the page from <em>your</em> browser for our scanner —
           open the site, click the bookmark, and it scores the lead into your Prospecting board.
         </p>
       </div>
@@ -83,6 +86,37 @@ export default function Bookmarklet({ initialToken, baseUrl }: { initialToken: s
           {busy ? "Generating…" : "Generate my scanner bookmarklet"}
         </button>
       )}
+      <div className="space-y-2 border-t border-slate-200 pt-3">
+        <h3 className="text-sm font-semibold">Upload a page saved from your browser</h3>
+        <p className="text-xs text-slate-500">If the bookmarklet cannot connect: open the real page, complete any browser challenge, then save it as an HTML file using SingleFile or your browser’s Save Page As. SingleFile bundles images and styles into one file. Capture each page separately.</p>
+        <label className="block text-xs">Original website URL
+          <input type="url" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://example.com/" className="input mt-1 w-full" disabled={uploadBusy} />
+        </label>
+        <label className="block text-xs">Saved HTML file (up to 20 MB)
+          <input type="file" accept=".html,.htm,text/html" disabled={uploadBusy || !sourceUrl.trim()} className="mt-1 block w-full text-xs" onChange={async (e) => {
+            const file = e.target.files?.[0]; e.target.value = "";
+            if (!file) return;
+            if (file.size > 20_000_000 || !/\.html?$/i.test(file.name)) { setUploadMessage("Choose an HTML file up to 20 MB."); return; }
+            setUploadBusy(true); setUploadMessage("Scanning your saved page…");
+            try {
+              let captureToken = token;
+              if (!captureToken) {
+                const response = await fetch("/api/account/capture-token", { method: "POST" });
+                const data = await response.json();
+                if (!response.ok || !data.token) throw new Error("Could not create your capture token. Please sign in again.");
+                captureToken = data.token; setToken(data.token);
+              }
+              const response = await fetch("/api/public/manual-scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: captureToken, url: sourceUrl.trim(), html: await file.text() }) });
+              const data = await response.json();
+              if (!response.ok || !data.ok) throw new Error(data.error || "Capture failed.");
+              setUploadMessage(`Saved and scanned ${data.businessName || data.url}. Open Prospecting to generate its demo from this capture.`);
+            } catch (error) { setUploadMessage(error instanceof Error ? error.message : "Capture failed. Please try again."); }
+            finally { setUploadBusy(false); }
+          }} />
+        </label>
+        <p role="status" className="text-xs">{uploadMessage}</p>
+        <a href="/dashboard/prospecting" className="inline-block text-xs text-brand-600 underline">Back to Prospecting</a>
+      </div>
     </div>
   );
 }

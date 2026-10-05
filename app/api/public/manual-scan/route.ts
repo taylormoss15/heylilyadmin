@@ -19,7 +19,7 @@ export function OPTIONS() {
 const bodySchema = z.object({
   token: z.string().min(10),
   url: z.string().min(3).max(300),
-  html: z.string().min(1).max(4_000_000),
+  html: z.string().min(1).max(20_000_000),
 });
 
 // Manual scan from a rep's browser bookmarklet. The rep's own session already
@@ -37,6 +37,10 @@ export async function POST(request: NextRequest) {
 
   const url = normalizeProspectUrl(parsed.data.url);
   if (!url) return NextResponse.json({ error: "That doesn't look like a valid website address." }, { status: 400, headers: CORS });
+  const existing = await prisma.prospect.findUnique({ where: { url } });
+  if (existing?.ownerId && existing.ownerId !== rep.id && rep.role !== "OWNER") {
+    return NextResponse.json({ error: "This lead belongs to another rep." }, { status: 403, headers: CORS });
+  }
 
   let result;
   try {
@@ -45,8 +49,10 @@ export async function POST(request: NextRequest) {
     const message = err instanceof Error ? err.message : "Scan failed";
     return NextResponse.json({ error: `Couldn't score that page: ${message}` }, { status: 502, headers: CORS });
   }
+  if (result.siteStatus === "blocked") {
+    return NextResponse.json({ error: "This capture still contains a bot challenge. Finish the challenge and save the actual business page, then try again." }, { status: 422, headers: CORS });
+  }
 
-  const existing = await prisma.prospect.findUnique({ where: { url } });
   const data = {
     businessName: existing?.businessName || result.businessName || null,
     phone: existing?.phone || result.phone || null,

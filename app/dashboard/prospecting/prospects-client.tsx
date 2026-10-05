@@ -1553,7 +1553,8 @@ function DetailsPanel({
         {r.siteStatus === "blocked" && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
             <p className="font-semibold">🛡 A bot blocker stopped the automated scan</p>
-            <p className="mt-1">Cloudflare (or similar) blocked our scanner, so the score may be unreliable. A rep can open the site in a normal browser and run the scan manually — or you can enter the score by hand.</p>
+            <p className="mt-1">Open the real site in your browser, then capture it with your scanner bookmarklet or upload saved HTML. We can scan and generate a demo from that capture without fetching the blocked page again.</p>
+            <a href="/dashboard/account" target="_blank" rel="noreferrer" className="mt-2 inline-block font-semibold underline">Open manual capture tools →</a>
           </div>
         )}
         <DemoBlock prospectId={r.id} demoToken={r.demoToken} onGenerated={(t) => onPatch({ demoToken: t })} />
