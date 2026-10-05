@@ -8,7 +8,7 @@ export function isEmailConfigured(): boolean {
 }
 
 export interface SendEmailInput {
-  to: string;
+  to: string | string[];
   subject: string;
   html: string;
   text?: string;
@@ -40,7 +40,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       },
       body: JSON.stringify({
         from,
-        to: [input.to],
+        to: Array.isArray(input.to) ? input.to : [input.to],
         subject: input.subject,
         html: input.html,
         text: input.text,

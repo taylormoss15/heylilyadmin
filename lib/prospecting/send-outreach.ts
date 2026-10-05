@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { outreachRecipients } from "./recipients";
 import { sendEmail } from "@/lib/integrations/email";
 import { coldOutreachEmail } from "@/lib/email/templates";
 import { outreachIssues } from "@/lib/prospecting/outreach-issues";
@@ -94,8 +95,8 @@ export async function sendOutreach(prospectId: string, opts: { force?: boolean }
   if (prospect.unsubscribedAt) return { sent: false, reason: "Unsubscribed" };
   if (prospect.emailedAt && !opts.force) return { sent: false, reason: "Already emailed" };
 
-  const to = (prospect.email || prospect.leadEmail || "").trim();
-  if (!to) return { sent: false, reason: "No contact email on this lead" };
+  const to = outreachRecipients(prospect);
+  if (!to.length) return { sent: false, reason: "No contact email on this lead" };
 
   // The lead list may flag an address as invalid/undeliverable. Sending to it
   // guarantees a bounce, which hurts the cold-sending domain's reputation — skip

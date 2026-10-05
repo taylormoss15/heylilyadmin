@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/current-user";
+import { getCurrentUser, isOwner } from "@/lib/current-user";
 import { editCustomSite } from "@/lib/site/ai-designer";
 import { finalizeCustomHtml } from "@/lib/site/finalize";
 import { screenshotHtml } from "@/lib/site/screenshot";
@@ -22,6 +22,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 
   const prospect = await prisma.prospect.findUnique({ where: { id: params.id } });
+  if (prospect && !isOwner(me) && prospect.ownerId !== me.id) {
+    return NextResponse.json({ error: "You can only edit your own leads." }, { status: 403 });
+  }
   if (!prospect?.demoToken) return NextResponse.json({ error: "No demo to edit yet." }, { status: 404 });
 
   const demo = await prisma.demo.findUnique({ where: { token: prospect.demoToken } });
@@ -48,6 +51,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       demo.redesignHtml,
       instruction.trim()
     );
+    if (design.dryRun) {
+      return NextResponse.json({ error: "AI editing is not configured for this environment." }, { status: 503 });
+    }
     finalized = finalizeCustomHtml(design.html, finalizeOpts);
     summary = design.summary;
     afterScore = design.report.a11yScore;
@@ -58,10 +64,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const afterShot = await screenshotHtml(finalized);
 
-  await prisma.demo.update({
+  await prisma.$transaction([prisma.demo.update({
     where: { token: demo.token },
     data: { redesignHtml: finalized, afterShot: afterShot ?? demo.afterShot, afterScore: afterScore ?? demo.afterScore },
-  });
-
+  }),
+  // A changed site must be reviewed again before outreach.
+  prisma.prospect.update({ where: { id: prospect.id }, data: { reviewStatus: "PENDING" } })]);
   return NextResponse.json({ ok: true, summary });
 }
